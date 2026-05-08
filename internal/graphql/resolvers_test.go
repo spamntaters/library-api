@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/user/library-api/internal/db"
+	"github.com/user/library-api/internal/openlibrary"
 )
 
 func TestQuery_Books_NoFilters(t *testing.T) {
@@ -316,6 +317,309 @@ func TestMutation_UpdateBook(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "Updated Title", result.Title)
+}
+
+func TestQuery_SimilarBooks(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{
+		ID:    1,
+		Title: "Dune",
+	}, nil)
+
+	olClient.On("SearchByQuery", "Dune", 5).Return(&openlibrary.SearchResponse{
+		Docs: []openlibrary.Doc{
+			{Title: "Dune Messiah", FirstPublishYear: 1969},
+			{Title: "Children of Dune", FirstPublishYear: 1976},
+		},
+	}, nil)
+
+	result, err := resolver.Query().SimilarBooks(context.Background(), 1, intPtr(5))
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "Dune Messiah", *result[0].Title)
+	assert.Equal(t, 1969, *result[0].FirstPublishYear)
+}
+
+func TestQuery_SimilarBooks_DefaultLimit(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{
+		ID:    1,
+		Title: "Test Book",
+	}, nil)
+
+	olClient.On("SearchByQuery", "Test Book", 10).Return(&openlibrary.SearchResponse{
+		Docs: []openlibrary.Doc{},
+	}, nil)
+
+	result, err := resolver.Query().SimilarBooks(context.Background(), 1, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestQuery_SimilarBooks_Error(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{}, errors.New("not found"))
+
+	result, err := resolver.Query().SimilarBooks(context.Background(), 1, nil)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestQuery_SimilarSeries(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	store.On("GetSeries", mock.Anything, int32(1)).Return(db.Series{
+		ID:   1,
+		Name: "Foundation",
+	}, nil)
+
+	olClient.On("SearchByQuery", "Foundation", 3).Return(&openlibrary.SearchResponse{
+		Docs: []openlibrary.Doc{
+			{Title: "Foundation and Empire", FirstPublishYear: 1952},
+		},
+	}, nil)
+
+	result, err := resolver.Query().SimilarSeries(context.Background(), 1, intPtr(3))
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Foundation and Empire", *result[0].Title)
+}
+
+func TestQuery_SimilarSeries_Error(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	store.On("GetSeries", mock.Anything, int32(999)).Return(db.Series{}, errors.New("not found"))
+
+	result, err := resolver.Query().SimilarSeries(context.Background(), 999, nil)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestQuery_SearchOpenLibrary(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	olClient.On("SearchByQuery", "science fiction", 5).Return(&openlibrary.SearchResponse{
+		Docs: []openlibrary.Doc{
+			{Title: "Neuromancer", FirstPublishYear: 1984},
+			{Title: "Snow Crash", FirstPublishYear: 1992},
+		},
+	}, nil)
+
+	result, err := resolver.Query().SearchOpenLibrary(context.Background(), "science fiction", intPtr(5))
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "Neuromancer", *result[0].Title)
+}
+
+func TestQuery_SearchOpenLibrary_DefaultLimit(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	olClient.On("SearchByQuery", "test", 20).Return(&openlibrary.SearchResponse{
+		Docs: []openlibrary.Doc{},
+	}, nil)
+
+	result, err := resolver.Query().SearchOpenLibrary(context.Background(), "test", nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestQuery_SearchOpenLibrary_Error(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	olClient.On("SearchByQuery", "query", 20).Return((*openlibrary.SearchResponse)(nil), errors.New("API error"))
+
+	result, err := resolver.Query().SearchOpenLibrary(context.Background(), "query", nil)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_CreateBook_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("CreateBook", mock.Anything, mock.Anything).Return(db.Book{}, errors.New("db error"))
+
+	input := CreateBookInput{
+		Title:    "New Book",
+		AuthorID: 1,
+	}
+
+	result, err := resolver.Mutation().CreateBook(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "db error")
+}
+
+func TestMutation_UpdateBook_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("UpdateBook", mock.Anything, mock.Anything).Return(db.Book{}, errors.New("not found"))
+
+	input := UpdateBookInput{
+		Title: strPtr("Updated"),
+	}
+
+	result, err := resolver.Mutation().UpdateBook(context.Background(), 1, input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_UpdateAuthor_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("UpdateAuthor", mock.Anything, mock.Anything).Return(db.Author{}, errors.New("not found"))
+
+	input := UpdateAuthorInput{
+		Name: strPtr("Updated Name"),
+	}
+
+	result, err := resolver.Mutation().UpdateAuthor(context.Background(), 1, input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_UpdateSeries_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("UpdateSeries", mock.Anything, mock.Anything).Return(db.Series{}, errors.New("not found"))
+
+	input := UpdateSeriesInput{
+		Name: strPtr("Updated Series"),
+	}
+
+	result, err := resolver.Mutation().UpdateSeries(context.Background(), 1, input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_DeleteBook_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("DeleteBook", mock.Anything, int32(1)).Return(errors.New("db error"))
+
+	result, err := resolver.Mutation().DeleteBook(context.Background(), 1)
+
+	require.Error(t, err)
+	assert.False(t, result)
+}
+
+func TestMutation_DeleteAuthor_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("DeleteAuthor", mock.Anything, int32(1)).Return(errors.New("db error"))
+
+	result, err := resolver.Mutation().DeleteAuthor(context.Background(), 1)
+
+	require.Error(t, err)
+	assert.False(t, result)
+}
+
+func TestMutation_DeleteSeries_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("DeleteSeries", mock.Anything, int32(1)).Return(errors.New("db error"))
+
+	result, err := resolver.Mutation().DeleteSeries(context.Background(), 1)
+
+	require.Error(t, err)
+	assert.False(t, result)
+}
+
+func TestMutation_AddBookToSeries_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("AddBookToSeries", mock.Anything, mock.Anything).Return(db.SeriesBook{}, errors.New("db error"))
+
+	result, err := resolver.Mutation().AddBookToSeries(context.Background(), 1, 2, 3)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_RemoveBookFromSeries_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("RemoveBookFromSeries", mock.Anything, mock.Anything).Return(errors.New("db error"))
+
+	result, err := resolver.Mutation().RemoveBookFromSeries(context.Background(), 1, 2)
+
+	require.Error(t, err)
+	assert.False(t, result)
+}
+
+func TestMutation_CreateTag_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("CreateTag", mock.Anything, "duplicate").Return(db.Tag{}, errors.New("db error"))
+
+	result, err := resolver.Mutation().CreateTag(context.Background(), "duplicate")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_AddTagToBook_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("AddTagToBook", mock.Anything, mock.Anything).Return(errors.New("db error"))
+
+	result, err := resolver.Mutation().AddTagToBook(context.Background(), 1, 2)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestMutation_RemoveTagFromBook_Error(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("RemoveTagFromBook", mock.Anything, mock.Anything).Return(errors.New("db error"))
+
+	result, err := resolver.Mutation().RemoveTagFromBook(context.Background(), 1, 2)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
 }
 
 func TestValidation_CreateSeries_DuplicateName(t *testing.T) {
