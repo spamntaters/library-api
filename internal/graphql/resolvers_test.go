@@ -450,11 +450,24 @@ func TestMutation_AddBookToSeries(t *testing.T) {
 		Position: 3,
 	}, nil)
 
+	store.On("GetBook", mock.Anything, int32(2)).Return(db.Book{
+		ID:    2,
+		Title: "Linked Book",
+		Owned: true,
+	}, nil)
+
+	store.On("GetSeries", mock.Anything, int32(1)).Return(db.Series{
+		ID:   1,
+		Name: "Linked Series",
+	}, nil)
+
 	result, err := resolver.Mutation().AddBookToSeries(context.Background(), 2, 1, 3)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 3, result.Position)
+	assert.Equal(t, "Linked Book", result.Book.Title)
+	assert.Equal(t, "Linked Series", result.Series.Name)
 }
 
 func TestMutation_RemoveBookFromSeries(t *testing.T) {

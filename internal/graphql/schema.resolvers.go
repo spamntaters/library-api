@@ -185,132 +185,464 @@ func (r *queryResolver) LookupByIsbn(ctx context.Context, isbn string) (*Externa
 
 // CreateBook is the resolver for the createBook field.
 func (r *mutationResolver) CreateBook(ctx context.Context, input CreateBookInput) (*Book, error) {
-	panic("not implemented")
+	owned := false
+	if input.Owned != nil {
+		owned = *input.Owned
+	}
+
+	book, err := r.Store.CreateBook(ctx, db.CreateBookParams{
+		Title:         input.Title,
+		AuthorID:      int32(input.AuthorID),
+		Isbn:          pgtype.Text{String: ptrToStr(input.Isbn), Valid: input.Isbn != nil},
+		Isbn13:        pgtype.Text{String: ptrToStr(input.Isbn13), Valid: input.Isbn13 != nil},
+		PublishedDate: timeToPgDate(input.PublishedDate),
+		PageCount:     intToPgInt4(input.PageCount),
+		Description:   pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
+		CoverUrl:      pgtype.Text{Valid: false},
+		Owned:         owned,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return dbToGraphQLBook(book), nil
 }
 
 // UpdateBook is the resolver for the updateBook field.
 func (r *mutationResolver) UpdateBook(ctx context.Context, id int, input UpdateBookInput) (*Book, error) {
-	panic("not implemented")
+	book, err := r.Store.UpdateBook(ctx, db.UpdateBookParams{
+		ID:            int32(id),
+		Title:         ptrToStr(input.Title),
+		Isbn:          pgtype.Text{String: ptrToStr(input.Isbn), Valid: input.Isbn != nil},
+		Isbn13:        pgtype.Text{String: ptrToStr(input.Isbn13), Valid: input.Isbn13 != nil},
+		PublishedDate: timeToPgDate(input.PublishedDate),
+		PageCount:     intToPgInt4(input.PageCount),
+		Description:   pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return dbToGraphQLBook(book), nil
 }
 
 // DeleteBook is the resolver for the deleteBook field.
 func (r *mutationResolver) DeleteBook(ctx context.Context, id int) (bool, error) {
-	panic("not implemented")
+	err := r.Store.DeleteBook(ctx, int32(id))
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ToggleOwned is the resolver for the toggleOwned field.
 func (r *mutationResolver) ToggleOwned(ctx context.Context, id int) (*Book, error) {
-	panic("not implemented")
+	book, err := r.Store.ToggleOwned(ctx, int32(id))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLBook(book), nil
 }
 
 // CreateAuthor is the resolver for the createAuthor field.
 func (r *mutationResolver) CreateAuthor(ctx context.Context, input CreateAuthorInput) (*Author, error) {
-	panic("not implemented")
+	author, err := r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
+		Name: input.Name,
+		Bio:  pgtype.Text{String: ptrToStr(input.Bio), Valid: input.Bio != nil},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLAuthor(author), nil
 }
 
 // UpdateAuthor is the resolver for the updateAuthor field.
 func (r *mutationResolver) UpdateAuthor(ctx context.Context, id int, input UpdateAuthorInput) (*Author, error) {
-	panic("not implemented")
+	author, err := r.Store.UpdateAuthor(ctx, db.UpdateAuthorParams{
+		ID:   int32(id),
+		Name: ptrToStr(input.Name),
+		Bio:  pgtype.Text{String: ptrToStr(input.Bio), Valid: input.Bio != nil},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLAuthor(author), nil
 }
 
 // DeleteAuthor is the resolver for the deleteAuthor field.
 func (r *mutationResolver) DeleteAuthor(ctx context.Context, id int) (bool, error) {
-	panic("not implemented")
+	err := r.Store.DeleteAuthor(ctx, int32(id))
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CreateSeries is the resolver for the createSeries field.
 func (r *mutationResolver) CreateSeries(ctx context.Context, input CreateSeriesInput) (*Series, error) {
-	panic("not implemented")
+	series, err := r.Store.CreateSeries(ctx, db.CreateSeriesParams{
+		Name:        input.Name,
+		Description: pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLSeries(series), nil
 }
 
 // UpdateSeries is the resolver for the updateSeries field.
 func (r *mutationResolver) UpdateSeries(ctx context.Context, id int, input UpdateSeriesInput) (*Series, error) {
-	panic("not implemented")
+	series, err := r.Store.UpdateSeries(ctx, db.UpdateSeriesParams{
+		ID:          int32(id),
+		Name:        ptrToStr(input.Name),
+		Description: pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLSeries(series), nil
 }
 
 // DeleteSeries is the resolver for the deleteSeries field.
 func (r *mutationResolver) DeleteSeries(ctx context.Context, id int) (bool, error) {
-	panic("not implemented")
+	err := r.Store.DeleteSeries(ctx, int32(id))
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // AddBookToSeries is the resolver for the addBookToSeries field.
 func (r *mutationResolver) AddBookToSeries(ctx context.Context, bookID int, seriesID int, position int) (*SeriesBook, error) {
-	panic("not implemented")
+	sb, err := r.Store.AddBookToSeries(ctx, db.AddBookToSeriesParams{
+		SeriesID: int32(seriesID),
+		BookID:   int32(bookID),
+		Position: int32(position),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	book, err := r.Store.GetBook(ctx, sb.BookID)
+	if err != nil {
+		return nil, err
+	}
+
+	series, err := r.Store.GetSeries(ctx, sb.SeriesID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SeriesBook{
+		Book:     dbToGraphQLBook(book),
+		Series:   dbToGraphQLSeries(series),
+		Position: int(sb.Position),
+	}, nil
 }
 
 // RemoveBookFromSeries is the resolver for the removeBookFromSeries field.
 func (r *mutationResolver) RemoveBookFromSeries(ctx context.Context, bookID int, seriesID int) (bool, error) {
-	panic("not implemented")
+	err := r.Store.RemoveBookFromSeries(ctx, db.RemoveBookFromSeriesParams{
+		SeriesID: int32(seriesID),
+		BookID:   int32(bookID),
+	})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CreateTag is the resolver for the createTag field.
 func (r *mutationResolver) CreateTag(ctx context.Context, name string) (*Tag, error) {
-	panic("not implemented")
+	tag, err := r.Store.CreateTag(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLTag(tag), nil
 }
 
 // AddTagToBook is the resolver for the addTagToBook field.
 func (r *mutationResolver) AddTagToBook(ctx context.Context, bookID int, tagID int) (*Book, error) {
-	panic("not implemented")
+	err := r.Store.AddTagToBook(ctx, db.AddTagToBookParams{
+		BookID: int32(bookID),
+		TagID:  int32(tagID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	book, err := r.Store.GetBook(ctx, int32(bookID))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLBook(book), nil
 }
 
 // RemoveTagFromBook is the resolver for the removeTagFromBook field.
 func (r *mutationResolver) RemoveTagFromBook(ctx context.Context, bookID int, tagID int) (*Book, error) {
-	panic("not implemented")
+	err := r.Store.RemoveTagFromBook(ctx, db.RemoveTagFromBookParams{
+		BookID: int32(bookID),
+		TagID:  int32(tagID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	book, err := r.Store.GetBook(ctx, int32(bookID))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLBook(book), nil
 }
 
 // Books is the resolver for the books field.
 func (r *queryResolver) Books(ctx context.Context, owned *bool, authorID *int, tagID *int) ([]*Book, error) {
-	panic("not implemented")
+	dbBooks, err := r.Store.ListBooks(ctx, db.ListBooksParams{
+		Owned:    pgtype.Bool{Bool: ptrToBool(owned), Valid: owned != nil},
+		AuthorID: pgtype.Int4{Int32: int32(ptrToInt(authorID)), Valid: authorID != nil},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	books := make([]*Book, len(dbBooks))
+	for i, b := range dbBooks {
+		books[i] = dbToGraphQLBook(b)
+	}
+	return books, nil
 }
 
 // Book is the resolver for the book field.
 func (r *queryResolver) Book(ctx context.Context, id int) (*Book, error) {
-	panic("not implemented")
+	book, err := r.Store.GetBook(ctx, int32(id))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLBook(book), nil
 }
 
 // Authors is the resolver for the authors field.
 func (r *queryResolver) Authors(ctx context.Context) ([]*Author, error) {
-	panic("not implemented")
+	dbAuthors, err := r.Store.ListAuthors(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	authors := make([]*Author, len(dbAuthors))
+	for i, a := range dbAuthors {
+		authors[i] = dbToGraphQLAuthor(a)
+	}
+	return authors, nil
 }
 
 // Author is the resolver for the author field.
 func (r *queryResolver) Author(ctx context.Context, id int) (*Author, error) {
-	panic("not implemented")
+	author, err := r.Store.GetAuthor(ctx, int32(id))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLAuthor(author), nil
 }
 
 // Series is the resolver for the series field.
 func (r *queryResolver) Series(ctx context.Context) ([]*Series, error) {
-	panic("not implemented")
+	dbSeries, err := r.Store.ListSeries(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	series := make([]*Series, len(dbSeries))
+	for i, s := range dbSeries {
+		series[i] = dbToGraphQLSeries(s)
+	}
+	return series, nil
 }
 
 // SeriesByID is the resolver for the seriesByID field.
 func (r *queryResolver) SeriesByID(ctx context.Context, id int) (*Series, error) {
-	panic("not implemented")
+	series, err := r.Store.GetSeries(ctx, int32(id))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLSeries(series), nil
 }
 
 // SeriesMissingBooks is the resolver for the seriesMissingBooks field.
 func (r *queryResolver) SeriesMissingBooks(ctx context.Context, seriesID int) ([]*Book, error) {
-	panic("not implemented")
+	dbBooks, err := r.Store.GetMissingBooks(ctx, int32(seriesID))
+	if err != nil {
+		return nil, err
+	}
+
+	books := make([]*Book, len(dbBooks))
+	for i, b := range dbBooks {
+		books[i] = dbToGraphQLBook(b)
+	}
+	return books, nil
 }
 
 // SimilarBooks is the resolver for the similarBooks field.
 func (r *queryResolver) SimilarBooks(ctx context.Context, bookID int, limit *int) ([]*ExternalBook, error) {
-	panic("not implemented")
+	l := 10
+	if limit != nil {
+		l = *limit
+	}
+
+	book, err := r.Store.GetBook(ctx, int32(bookID))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := r.OLClient.SearchByQuery(book.Title, l)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]*ExternalBook, len(resp.Docs))
+	for i, doc := range resp.Docs {
+		results[i] = docToExternalBook(doc)
+	}
+	return results, nil
 }
 
 // SimilarSeries is the resolver for the similarSeries field.
 func (r *queryResolver) SimilarSeries(ctx context.Context, seriesID int, limit *int) ([]*ExternalBook, error) {
-	panic("not implemented")
+	l := 10
+	if limit != nil {
+		l = *limit
+	}
+
+	series, err := r.Store.GetSeries(ctx, int32(seriesID))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := r.OLClient.SearchByQuery(series.Name, l)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]*ExternalBook, len(resp.Docs))
+	for i, doc := range resp.Docs {
+		results[i] = docToExternalBook(doc)
+	}
+	return results, nil
 }
 
 // SearchOpenLibrary is the resolver for the searchOpenLibrary field.
 func (r *queryResolver) SearchOpenLibrary(ctx context.Context, query string, limit *int) ([]*ExternalBook, error) {
-	panic("not implemented")
+	l := 20
+	if limit != nil {
+		l = *limit
+	}
+
+	resp, err := r.OLClient.SearchByQuery(query, l)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]*ExternalBook, len(resp.Docs))
+	for i, doc := range resp.Docs {
+		results[i] = docToExternalBook(doc)
+	}
+	return results, nil
 }
 
 // Tags is the resolver for the tags field.
 func (r *queryResolver) Tags(ctx context.Context) ([]*Tag, error) {
-	panic("not implemented")
+	dbTags, err := r.Store.ListTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tags := make([]*Tag, len(dbTags))
+	for i, t := range dbTags {
+		tags[i] = dbToGraphQLTag(t)
+	}
+	return tags, nil
+}
+
+func dbToGraphQLSeries(s db.Series) *Series {
+	result := &Series{
+		ID:   int(s.ID),
+		Name: s.Name,
+	}
+	if s.Description.Valid {
+		result.Description = &s.Description.String
+	}
+	return result
+}
+
+func dbToGraphQLTag(t db.Tag) *Tag {
+	return &Tag{
+		ID:   int(t.ID),
+		Name: t.Name,
+	}
+}
+
+func docToExternalBook(doc openlibrary.Doc) *ExternalBook {
+	result := &ExternalBook{
+		Title: &doc.Title,
+	}
+	if len(doc.AuthorName) > 0 {
+		names := make([]*string, len(doc.AuthorName))
+		for i, n := range doc.AuthorName {
+			names[i] = &n
+		}
+		result.AuthorName = names
+	}
+	if len(doc.ISBN) > 0 {
+		isbns := make([]*string, len(doc.ISBN))
+		for i, isbn := range doc.ISBN {
+			isbns[i] = &isbn
+		}
+		result.Isbn = isbns
+	}
+	if doc.FirstPublishYear > 0 {
+		result.FirstPublishYear = &doc.FirstPublishYear
+	}
+	if doc.CoverID != "" {
+		result.CoverID = &doc.CoverID
+	}
+	if doc.Key != "" {
+		result.Key = &doc.Key
+	}
+	return result
+}
+
+func ptrToStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func ptrToBool(b *bool) bool {
+	if b == nil {
+		return false
+	}
+	return *b
+}
+
+func ptrToInt(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
+}
+
+func timeToPgDate(t *time.Time) pgtype.Date {
+	if t == nil {
+		return pgtype.Date{Valid: false}
+	}
+	return pgtype.Date{Time: *t, Valid: true}
+}
+
+func intToPgInt4(i *int) pgtype.Int4 {
+	if i == nil {
+		return pgtype.Int4{Valid: false}
+	}
+	return pgtype.Int4{Int32: int32(*i), Valid: true}
 }
 
 // Mutation returns MutationResolver implementation.
