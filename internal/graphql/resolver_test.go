@@ -38,6 +38,14 @@ func (m *MockStore) DeleteAuthor(ctx context.Context, id int32) error {
 	return args.Error(0)
 }
 
+func (m *MockStore) GetAuthorByName(ctx context.Context, name string) (db.Author, error) {
+	args := m.Called(ctx, name)
+	if args.Get(0) == nil {
+		return db.Author{}, args.Error(1)
+	}
+	return args.Get(0).(db.Author), args.Error(1)
+}
+
 func (m *MockStore) GetBooksByAuthor(ctx context.Context, authorID int32) ([]db.Book, error) {
 	args := m.Called(ctx, authorID)
 	return args.Get(0).([]db.Book), args.Error(1)

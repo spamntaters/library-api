@@ -329,12 +329,15 @@ func (r *mutationResolver) ScanAndAddBook(ctx context.Context, isbn string) (*Sc
 		authorName = olData.Authors[0].Name
 	}
 
-	author, err := r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
-		Name: authorName,
-		Bio:  pgtype.Text{Valid: false},
-	})
+	author, err := r.Store.GetAuthorByName(ctx, authorName)
 	if err != nil {
-		return nil, err
+		author, err = r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
+			Name: authorName,
+			Bio:  pgtype.Text{Valid: false},
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var pubDate pgtype.Date

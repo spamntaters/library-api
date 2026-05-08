@@ -127,6 +127,8 @@ func TestScanAndAddBook_NewBook(t *testing.T) {
 
 	store.On("GetBookByISBN", mock.Anything, pgtype.Text{String: "9780441172719", Valid: true}).Return(db.Book{}, errors.New("not found"))
 
+	store.On("GetAuthorByName", mock.Anything, "Frank Herbert").Return(db.Author{}, errors.New("not found"))
+
 	store.On("CreateAuthor", mock.Anything, db.CreateAuthorParams{
 		Name: "Frank Herbert",
 		Bio:  pgtype.Text{Valid: false},
@@ -164,6 +166,63 @@ func TestScanAndAddBook_NewBook(t *testing.T) {
 	require.NotNil(t, result.External)
 	assert.Equal(t, "Dune", *result.External.Title)
 
+	store.AssertExpectations(t)
+	olClient.AssertExpectations(t)
+}
+
+func TestScanAndAddBook_ExistingAuthor(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	olData := &openlibrary.BookData{
+		Title:         "Dune Messiah",
+		PublishDate:   "1969",
+		NumberOfPages: 256,
+		Authors: []openlibrary.AuthorOL{
+			{Name: "Frank Herbert"},
+		},
+		Identifiers: openlibrary.IdentifiersOL{
+			ISBN13: []string{"9780441172726"},
+		},
+		Cover: openlibrary.CoverOL{
+			Medium: "https://covers.openlibrary.org/b/id/67891-M.jpg",
+		},
+	}
+
+	store.On("GetBookByISBN", mock.Anything, pgtype.Text{String: "9780441172726", Valid: true}).Return(db.Book{}, errors.New("not found"))
+
+	store.On("GetAuthorByName", mock.Anything, "Frank Herbert").Return(db.Author{
+		ID:   1,
+		Name: "Frank Herbert",
+	}, nil)
+
+	store.On("CreateBook", mock.Anything, mock.MatchedBy(func(arg db.CreateBookParams) bool {
+		return arg.Title == "Dune Messiah" &&
+			arg.AuthorID == 1 &&
+			arg.Isbn13.String == "9780441172726" &&
+			arg.Owned == true
+	})).Return(db.Book{
+		ID:       2,
+		Title:    "Dune Messiah",
+		AuthorID: 1,
+		Isbn13:   pgtype.Text{String: "9780441172726", Valid: true},
+		Owned:    true,
+	}, nil)
+
+	olClient.On("LookupByISBN", "9780441172726").Return(olData, nil)
+
+	result, err := resolver.Mutation().ScanAndAddBook(context.Background(), "9780441172726")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, *result.AlreadyExists)
+	require.NotNil(t, result.Book)
+	assert.Equal(t, "Dune Messiah", result.Book.Title)
+	assert.Equal(t, 2, result.Book.ID)
+
+	// Should NOT call CreateAuthor since author already exists
+	store.AssertNotCalled(t, "CreateAuthor")
 	store.AssertExpectations(t)
 	olClient.AssertExpectations(t)
 }
