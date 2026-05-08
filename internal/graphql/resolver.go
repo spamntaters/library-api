@@ -6,6 +6,6 @@ import (
 )
 
 type Resolver struct {
-	Store    db.Querier
+	Store    db.StoreInterface
 	OLClient openlibrary.Client
 }

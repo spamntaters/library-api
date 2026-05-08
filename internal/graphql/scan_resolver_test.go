@@ -126,6 +126,7 @@ func TestScanAndAddBook_NewBook(t *testing.T) {
 	}
 
 	store.On("GetBookByISBN", mock.Anything, pgtype.Text{String: "9780441172719", Valid: true}).Return(db.Book{}, errors.New("not found"))
+	store.On("WithTx", mock.Anything, mock.Anything).Return(nil)
 
 	store.On("GetAuthorByName", mock.Anything, "Frank Herbert").Return(db.Author{}, errors.New("not found"))
 
@@ -191,6 +192,7 @@ func TestScanAndAddBook_ExistingAuthor(t *testing.T) {
 	}
 
 	store.On("GetBookByISBN", mock.Anything, pgtype.Text{String: "9780441172726", Valid: true}).Return(db.Book{}, errors.New("not found"))
+	store.On("WithTx", mock.Anything, mock.Anything).Return(nil)
 
 	store.On("GetAuthorByName", mock.Anything, "Frank Herbert").Return(db.Author{
 		ID:   1,
@@ -223,6 +225,39 @@ func TestScanAndAddBook_ExistingAuthor(t *testing.T) {
 
 	// Should NOT call CreateAuthor since author already exists
 	store.AssertNotCalled(t, "CreateAuthor")
+	store.AssertExpectations(t)
+	olClient.AssertExpectations(t)
+}
+
+func TestScanAndAddBook_TxRollback(t *testing.T) {
+	store := &MockStore{}
+	olClient := &MockOLClient{}
+	resolver := testResolver(store, olClient)
+
+	olData := &openlibrary.BookData{
+		Title:   "Failing Book",
+		Authors: []openlibrary.AuthorOL{{Name: "Test Author"}},
+		Identifiers: openlibrary.IdentifiersOL{
+			ISBN13: []string{"9780000000000"},
+		},
+	}
+
+	store.On("GetBookByISBN", mock.Anything, pgtype.Text{String: "9780000000000", Valid: true}).Return(db.Book{}, errors.New("not found"))
+	store.On("WithTx", mock.Anything, mock.Anything).Return(nil)
+	olClient.On("LookupByISBN", "9780000000000").Return(olData, nil)
+	store.On("GetAuthorByName", mock.Anything, "Test Author").Return(db.Author{}, errors.New("not found"))
+	store.On("CreateAuthor", mock.Anything, db.CreateAuthorParams{
+		Name: "Test Author",
+		Bio:  pgtype.Text{Valid: false},
+	}).Return(db.Author{ID: 1, Name: "Test Author"}, nil)
+	store.On("CreateBook", mock.Anything, mock.Anything).Return(db.Book{}, errors.New("db error"))
+
+	result, err := resolver.Mutation().ScanAndAddBook(context.Background(), "9780000000000")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, "db error", err.Error())
+
 	store.AssertExpectations(t)
 	olClient.AssertExpectations(t)
 }

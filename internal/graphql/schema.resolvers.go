@@ -329,17 +329,6 @@ func (r *mutationResolver) ScanAndAddBook(ctx context.Context, isbn string) (*Sc
 		authorName = olData.Authors[0].Name
 	}
 
-	author, err := r.Store.GetAuthorByName(ctx, authorName)
-	if err != nil {
-		author, err = r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
-			Name: authorName,
-			Bio:  pgtype.Text{Valid: false},
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	var pubDate pgtype.Date
 	if olData.PublishDate != "" {
 		t, err := time.Parse("January 2, 2006", olData.PublishDate)
@@ -367,16 +356,31 @@ func (r *mutationResolver) ScanAndAddBook(ctx context.Context, isbn string) (*Sc
 		pages = pgtype.Int4{Int32: int32(olData.NumberOfPages), Valid: true}
 	}
 
-	book, err := r.Store.CreateBook(ctx, db.CreateBookParams{
-		Title:         olData.Title,
-		AuthorID:      author.ID,
-		Isbn:          pgtype.Text{String: isbn10, Valid: isbn10 != ""},
-		Isbn13:        pgtype.Text{String: isbn13, Valid: isbn13 != ""},
-		PublishedDate: pubDate,
-		PageCount:     pages,
-		Description:   pgtype.Text{Valid: false},
-		CoverUrl:      pgtype.Text{String: olData.Cover.Medium, Valid: olData.Cover.Medium != ""},
-		Owned:         true,
+	var book db.Book
+	err = r.Store.WithTx(ctx, func(ctx context.Context, qtx db.Querier) error {
+		author, err := qtx.GetAuthorByName(ctx, authorName)
+		if err != nil {
+			author, err = qtx.CreateAuthor(ctx, db.CreateAuthorParams{
+				Name: authorName,
+				Bio:  pgtype.Text{Valid: false},
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		book, err = qtx.CreateBook(ctx, db.CreateBookParams{
+			Title:         olData.Title,
+			AuthorID:      author.ID,
+			Isbn:          pgtype.Text{String: isbn10, Valid: isbn10 != ""},
+			Isbn13:        pgtype.Text{String: isbn13, Valid: isbn13 != ""},
+			PublishedDate: pubDate,
+			PageCount:     pages,
+			Description:   pgtype.Text{Valid: false},
+			CoverUrl:      pgtype.Text{String: olData.Cover.Medium, Valid: olData.Cover.Medium != ""},
+			Owned:         true,
+		})
+		return err
 	})
 	if err != nil {
 		return nil, err
