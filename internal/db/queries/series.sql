@@ -40,7 +40,7 @@ WHERE series_id = $1 AND book_id = $2;
 SELECT sb.series_id, sb.book_id, sb.position,
        b.id as book_id, b.title, b.author_id, b.isbn, b.isbn13,
        b.published_date, b.page_count, b.description, b.cover_url, b.owned,
-       b.created_at as book_created_at, b.updated_at as book_updated_at
+       b.created_at as book_created_at, b.updated_at as book_updated_at, b.read
 FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1
@@ -50,7 +50,7 @@ OFFSET sqlc.narg('offset');
 
 -- name: GetMissingBooks :many
 SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date,
-       b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at
+       b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at, b.read
 FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1 AND b.owned = false

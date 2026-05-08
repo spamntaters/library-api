@@ -235,7 +235,7 @@ func TestQuery_SeriesMissingBooks(t *testing.T) {
 
 	store.On("GetMissingBooks", mock.Anything, db.GetMissingBooksParams{SeriesID: 1}).Return(missing, nil)
 
-	result, err := resolver.Query().SeriesMissingBooks(context.Background(), 1)
+	result, err := resolver.Query().SeriesMissingBooks(context.Background(), 1, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -248,7 +248,7 @@ func TestQuery_SeriesMissingBooks_Empty(t *testing.T) {
 
 	store.On("GetMissingBooks", mock.Anything, db.GetMissingBooksParams{SeriesID: 1}).Return([]db.Book{}, nil)
 
-	result, err := resolver.Query().SeriesMissingBooks(context.Background(), 1)
+	result, err := resolver.Query().SeriesMissingBooks(context.Background(), 1, nil, nil)
 
 	require.NoError(t, err)
 	assert.Empty(t, result)

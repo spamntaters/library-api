@@ -86,6 +86,11 @@ func (m *MockStore) ToggleOwned(ctx context.Context, id int32) (db.Book, error) 
 	return args.Get(0).(db.Book), args.Error(1)
 }
 
+func (m *MockStore) ToggleRead(ctx context.Context, id int32) (db.Book, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(db.Book), args.Error(1)
+}
+
 func (m *MockStore) GetBookByISBN(ctx context.Context, isbn pgtype.Text) (db.Book, error) {
 	args := m.Called(ctx, isbn)
 	return args.Get(0).(db.Book), args.Error(1)

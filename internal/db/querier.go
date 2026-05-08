@@ -22,6 +22,7 @@ type Querier interface {
 	UpdateBook(ctx context.Context, arg UpdateBookParams) (Book, error)
 	DeleteBook(ctx context.Context, id int32) error
 	ToggleOwned(ctx context.Context, id int32) (Book, error)
+	ToggleRead(ctx context.Context, id int32) (Book, error)
 	GetBookByISBN(ctx context.Context, isbn pgtype.Text) (Book, error)
 
 	CreateSeries(ctx context.Context, arg CreateSeriesParams) (Series, error)

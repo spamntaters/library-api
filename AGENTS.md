@@ -34,7 +34,8 @@ make test-coverage  Run with coverage report
 ### Code generation
 - `make generate` runs **gqlgen first, then sqlc**. gqlgen needs sqlc types to compile resolvers.
 - gqlgen validates by compiling the package — it will fail if the code doesn't build. Run `go mod tidy` if you get missing dependency errors during generation.
-- Helper functions (`dbToGraphQLBook`, `ptrToInt`, etc.) live at the bottom of `schema.resolvers.go`. gqlgen preserves code below the generated section.
+- If gqlgen fails because helper functions are missing, run `sqlc generate` first to update db types, then `gqlgen generate`.
+- Helper functions (`dbToGraphQLBook`, `ptrToInt`, etc.) live in `internal/graphql/helpers.go`. Do not put them in `schema.resolvers.go` — gqlgen will delete them on regeneration.
 
 ### GraphQL ID type
 - All GraphQL `ID!` fields map to Go `int` (not `string`), configured via `gqlgen.yml`:

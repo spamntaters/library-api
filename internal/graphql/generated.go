@@ -59,6 +59,7 @@ type ComplexityRoot struct {
 		Owned         func(childComplexity int) int
 		PageCount     func(childComplexity int) int
 		PublishedDate func(childComplexity int) int
+		Read          func(childComplexity int) int
 		Series        func(childComplexity int) int
 		Tags          func(childComplexity int) int
 		Title         func(childComplexity int) int
@@ -87,6 +88,7 @@ type ComplexityRoot struct {
 		RemoveTagFromBook    func(childComplexity int, bookID int, tagID int) int
 		ScanAndAddBook       func(childComplexity int, isbn string) int
 		ToggleOwned          func(childComplexity int, id int) int
+		ToggleRead           func(childComplexity int, id int) int
 		UpdateAuthor         func(childComplexity int, id int, input UpdateAuthorInput) int
 		UpdateBook           func(childComplexity int, id int, input UpdateBookInput) int
 		UpdateSeries         func(childComplexity int, id int, input UpdateSeriesInput) int
@@ -149,6 +151,7 @@ type MutationResolver interface {
 	UpdateBook(ctx context.Context, id int, input UpdateBookInput) (*Book, error)
 	DeleteBook(ctx context.Context, id int) (bool, error)
 	ToggleOwned(ctx context.Context, id int) (*Book, error)
+	ToggleRead(ctx context.Context, id int) (*Book, error)
 	CreateAuthor(ctx context.Context, input CreateAuthorInput) (*Author, error)
 	UpdateAuthor(ctx context.Context, id int, input UpdateAuthorInput) (*Author, error)
 	DeleteAuthor(ctx context.Context, id int) (bool, error)
@@ -290,6 +293,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Book.PublishedDate(childComplexity), true
+	case "Book.read":
+		if e.ComplexityRoot.Book.Read == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Book.Read(childComplexity), true
 	case "Book.series":
 		if e.ComplexityRoot.Book.Series == nil {
 			break
@@ -489,6 +498,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ToggleOwned(childComplexity, args["id"].(int)), true
+	case "Mutation.toggleRead":
+		if e.ComplexityRoot.Mutation.ToggleRead == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_toggleRead_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ToggleRead(childComplexity, args["id"].(int)), true
 	case "Mutation.updateAuthor":
 		if e.ComplexityRoot.Mutation.UpdateAuthor == nil {
 			break
@@ -870,6 +890,7 @@ type Book {
 	description: String
 	coverURL: String
 	owned: Boolean!
+	read: Boolean!
 	authorID: ID!
 	author: Author! @goField(forceResolver: true)
 	series: [SeriesBook!]! @goField(forceResolver: true)
@@ -932,6 +953,7 @@ type Mutation {
 	updateBook(id: ID!, input: UpdateBookInput!): Book!
 	deleteBook(id: ID!): Boolean!
 	toggleOwned(id: ID!): Book!
+	toggleRead(id: ID!): Book!
 	createAuthor(input: CreateAuthorInput!): Author!
 	updateAuthor(id: ID!, input: UpdateAuthorInput!): Author!
 	deleteAuthor(id: ID!): Boolean!
@@ -1031,6 +1053,8 @@ func (ec *executionContext) childFields_Book(ctx context.Context, field graphql.
 		return ec.fieldContext_Book_coverURL(ctx, field)
 	case "owned":
 		return ec.fieldContext_Book_owned(ctx, field)
+	case "read":
+		return ec.fieldContext_Book_read(ctx, field)
 	case "authorID":
 		return ec.fieldContext_Book_authorID(ctx, field)
 	case "author":
@@ -1440,6 +1464,20 @@ func (ec *executionContext) field_Mutation_scanAndAddBook_args(ctx context.Conte
 }
 
 func (ec *executionContext) field_Mutation_toggleOwned_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNID2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_toggleRead_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
@@ -2245,6 +2283,29 @@ func (ec *executionContext) fieldContext_Book_owned(_ context.Context, field gra
 	return graphql.NewScalarFieldContext("Book", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Book_read(ctx context.Context, field graphql.CollectedField, obj *Book) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Book_read(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Read, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Book_read(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Book", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _Book_authorID(ctx context.Context, field graphql.CollectedField, obj *Book) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2672,6 +2733,50 @@ func (ec *executionContext) fieldContext_Mutation_toggleOwned(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_toggleOwned_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_toggleRead(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_toggleRead(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ToggleRead(ctx, fc.Args["id"].(int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Book) graphql.Marshaler {
+			return ec.marshalNBook2ᚖgithubᚗcomᚋuserᚋlibraryᚑapiᚋinternalᚋgraphqlᚐBook(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_toggleRead(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Book(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_toggleRead_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5748,6 +5853,11 @@ func (ec *executionContext) _Book(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "read":
+			out.Values[i] = ec._Book_read(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "authorID":
 			out.Values[i] = ec._Book_authorID(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -5973,6 +6083,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "toggleOwned":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_toggleOwned(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "toggleRead":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_toggleRead(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

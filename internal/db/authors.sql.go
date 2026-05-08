@@ -84,7 +84,7 @@ func (q *Queries) GetAuthorByName(ctx context.Context, name string) (Author, err
 }
 
 const getBooksByAuthor = `-- name: GetBooksByAuthor :many
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 FROM books
 WHERE author_id = $1
 ORDER BY title
@@ -112,6 +112,7 @@ func (q *Queries) GetBooksByAuthor(ctx context.Context, authorID int32) ([]Book,
 			&i.Owned,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Read,
 		); err != nil {
 			return nil, err
 		}
