@@ -46,7 +46,7 @@ func (r *authorResolver) Series(ctx context.Context, obj *Author) ([]*Series, er
 func (r *bookResolver) Author(ctx context.Context, obj *Book) (*Author, error) {
 	dbAuthor, err := r.Store.GetAuthor(ctx, int32(obj.AuthorID))
 	if err != nil {
-		return nil, err
+		return nil, wrapNotFoundError(err, "author", obj.AuthorID)
 	}
 	return dbToGraphQLAuthor(dbAuthor), nil
 }
@@ -481,7 +481,7 @@ func (r *queryResolver) Books(ctx context.Context, owned *bool, authorID *int, t
 func (r *queryResolver) Book(ctx context.Context, id int) (*Book, error) {
 	book, err := r.Store.GetBook(ctx, int32(id))
 	if err != nil {
-		return nil, err
+		return nil, wrapNotFoundError(err, "book", id)
 	}
 	return dbToGraphQLBook(book), nil
 }
@@ -507,7 +507,7 @@ func (r *queryResolver) Authors(ctx context.Context, limit *int, offset *int) ([
 func (r *queryResolver) Author(ctx context.Context, id int) (*Author, error) {
 	author, err := r.Store.GetAuthor(ctx, int32(id))
 	if err != nil {
-		return nil, err
+		return nil, wrapNotFoundError(err, "author", id)
 	}
 	return dbToGraphQLAuthor(author), nil
 }
@@ -533,7 +533,7 @@ func (r *queryResolver) Series(ctx context.Context, limit *int, offset *int) ([]
 func (r *queryResolver) SeriesByID(ctx context.Context, id int) (*Series, error) {
 	series, err := r.Store.GetSeries(ctx, int32(id))
 	if err != nil {
-		return nil, err
+		return nil, wrapNotFoundError(err, "series", id)
 	}
 	return dbToGraphQLSeries(series), nil
 }
@@ -690,7 +690,7 @@ func (r *seriesResolver) MissingBooks(ctx context.Context, obj *Series) ([]*Book
 func (r *seriesBookResolver) Book(ctx context.Context, obj *SeriesBook) (*Book, error) {
 	book, err := r.Store.GetBook(ctx, int32(obj.BookID))
 	if err != nil {
-		return nil, err
+		return nil, wrapNotFoundError(err, "book", obj.BookID)
 	}
 	return dbToGraphQLBook(book), nil
 }
@@ -699,7 +699,7 @@ func (r *seriesBookResolver) Book(ctx context.Context, obj *SeriesBook) (*Book, 
 func (r *seriesBookResolver) Series(ctx context.Context, obj *SeriesBook) (*Series, error) {
 	series, err := r.Store.GetSeries(ctx, int32(obj.SeriesID))
 	if err != nil {
-		return nil, err
+		return nil, wrapNotFoundError(err, "series", obj.SeriesID)
 	}
 	return dbToGraphQLSeries(series), nil
 }
