@@ -122,18 +122,22 @@ func (q *Queries) GetBookByISBN(ctx context.Context, isbn pgtype.Text) (Book, er
 }
 
 const listBooks = `-- name: ListBooks :many
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
-FROM books
-WHERE ($1::boolean IS NULL OR owned = $1)
-  AND ($2::int IS NULL OR author_id = $2)
-ORDER BY title
-LIMIT $4
-OFFSET $3
+SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date, b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at
+FROM books b
+WHERE ($1::boolean IS NULL OR b.owned = $1)
+  AND ($2::int IS NULL OR b.author_id = $2)
+  AND ($3::int IS NULL OR EXISTS (
+    SELECT 1 FROM book_tags bt WHERE bt.book_id = b.id AND bt.tag_id = $3
+  ))
+ORDER BY b.title
+LIMIT $5
+OFFSET $4
 `
 
 type ListBooksParams struct {
 	Owned    pgtype.Bool
 	AuthorID pgtype.Int4
+	TagID    pgtype.Int4
 	Offset   pgtype.Int4
 	Limit    pgtype.Int4
 }
@@ -142,6 +146,7 @@ func (q *Queries) ListBooks(ctx context.Context, arg ListBooksParams) ([]Book, e
 	rows, err := q.db.Query(ctx, listBooks,
 		arg.Owned,
 		arg.AuthorID,
+		arg.TagID,
 		arg.Offset,
 		arg.Limit,
 	)

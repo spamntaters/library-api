@@ -68,6 +68,25 @@ func TestQuery_Books_FilterByAuthor(t *testing.T) {
 	require.Len(t, result, 1)
 }
 
+func TestQuery_Books_FilterByTag(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	books := []db.Book{
+		{ID: 1, Title: "Tagged Book", AuthorID: 1, Owned: true},
+	}
+
+	store.On("ListBooks", mock.Anything, mock.MatchedBy(func(arg db.ListBooksParams) bool {
+		return arg.TagID.Valid && arg.TagID.Int32 == 3
+	})).Return(books, nil)
+
+	result, err := resolver.Query().Books(context.Background(), nil, nil, intPtr(3), nil, nil)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Tagged Book", result[0].Title)
+}
+
 func TestQuery_Books_Error(t *testing.T) {
 	store := &MockStore{}
 	resolver := testResolver(store, &MockOLClient{})

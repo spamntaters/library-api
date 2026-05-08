@@ -9,11 +9,14 @@ FROM books
 WHERE id = $1;
 
 -- name: ListBooks :many
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
-FROM books
-WHERE (sqlc.narg(owned)::boolean IS NULL OR owned = sqlc.narg(owned))
-  AND (sqlc.narg(author_id)::int IS NULL OR author_id = sqlc.narg(author_id))
-ORDER BY title
+SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date, b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at
+FROM books b
+WHERE (sqlc.narg(owned)::boolean IS NULL OR b.owned = sqlc.narg(owned))
+  AND (sqlc.narg(author_id)::int IS NULL OR b.author_id = sqlc.narg(author_id))
+  AND (sqlc.narg(tag_id)::int IS NULL OR EXISTS (
+    SELECT 1 FROM book_tags bt WHERE bt.book_id = b.id AND bt.tag_id = sqlc.narg(tag_id)
+  ))
+ORDER BY b.title
 LIMIT sqlc.narg('limit')
 OFFSET sqlc.narg('offset');
 
