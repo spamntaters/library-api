@@ -392,6 +392,7 @@ func (r *queryResolver) Books(ctx context.Context, owned *bool, authorID *int, t
 	dbBooks, err := r.Store.ListBooks(ctx, db.ListBooksParams{
 		Owned:    pgtype.Bool{Bool: ptrToBool(owned), Valid: owned != nil},
 		AuthorID: pgtype.Int4{Int32: int32(ptrToInt(authorID)), Valid: authorID != nil},
+		TagID:    pgtype.Int4{Int32: int32(ptrToInt(tagID)), Valid: tagID != nil},
 		Limit:    pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
 		Offset:   pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
 	})
