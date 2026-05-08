@@ -14,173 +14,78 @@ import (
 	"github.com/user/library-api/internal/openlibrary"
 )
 
-func dbToGraphQLAuthor(a db.Author) *Author {
-	author := &Author{
-		ID:   int(a.ID),
-		Name: a.Name,
-	}
-	if a.Bio.Valid {
-		author.Bio = &a.Bio.String
-	}
-	return author
-}
-
-func dbToGraphQLBook(b db.Book) *Book {
-	book := &Book{
-		ID:    int(b.ID),
-		Title: b.Title,
-		Owned: b.Owned,
-	}
-	if b.Isbn.Valid {
-		s := b.Isbn.String
-		book.Isbn = &s
-	}
-	if b.Isbn13.Valid {
-		s := b.Isbn13.String
-		book.Isbn13 = &s
-	}
-	if b.PublishedDate.Valid {
-		t := b.PublishedDate.Time
-		book.PublishedDate = &t
-	}
-	if b.PageCount.Valid {
-		n := int(b.PageCount.Int32)
-		book.PageCount = &n
-	}
-	if b.Description.Valid {
-		s := b.Description.String
-		book.Description = &s
-	}
-	if b.CoverUrl.Valid {
-		s := b.CoverUrl.String
-		book.CoverURL = &s
-	}
-	return book
-}
-
-func olToExternalBook(data *openlibrary.BookData) *ExternalBook {
-	result := &ExternalBook{}
-	if data.Title != "" {
-		result.Title = &data.Title
-	}
-	for _, a := range data.Authors {
-		name := a.Name
-		result.AuthorName = append(result.AuthorName, &name)
-	}
-	for _, isbn := range data.Identifiers.ISBN13 {
-		s := isbn
-		result.Isbn = append(result.Isbn, &s)
-	}
-	if len(result.Isbn) == 0 {
-		for _, isbn := range data.Identifiers.ISBN10 {
-			s := isbn
-			result.Isbn = append(result.Isbn, &s)
-		}
-	}
-	if data.URL != "" {
-		result.Key = &data.URL
-	}
-	if data.Cover.Medium != "" {
-		result.CoverID = &data.Cover.Medium
-	}
-	return result
-}
-
-// ScanAndAddBook is the resolver for the scanAndAddBook field.
-func (r *mutationResolver) ScanAndAddBook(ctx context.Context, isbn string) (*ScanResult, error) {
-	existing, err := r.Store.GetBookByISBN(ctx, pgtype.Text{String: isbn, Valid: true})
-	if err == nil {
-		exists := true
-		return &ScanResult{
-			Book:          dbToGraphQLBook(existing),
-			AlreadyExists: &exists,
-		}, nil
-	}
-
-	olData, err := r.OLClient.LookupByISBN(isbn)
-	if err != nil {
-		return nil, err
-	}
-	if olData == nil {
-		exists := false
-		return &ScanResult{
-			AlreadyExists: &exists,
-		}, nil
-	}
-
-	authorName := ""
-	if len(olData.Authors) > 0 {
-		authorName = olData.Authors[0].Name
-	}
-
-	author, err := r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
-		Name: authorName,
-		Bio:  pgtype.Text{Valid: false},
-	})
+// Books is the resolver for the books field.
+func (r *authorResolver) Books(ctx context.Context, obj *Author) ([]*Book, error) {
+	dbBooks, err := r.Store.GetBooksByAuthor(ctx, int32(obj.ID))
 	if err != nil {
 		return nil, err
 	}
 
-	var pubDate pgtype.Date
-	if olData.PublishDate != "" {
-		t, err := time.Parse("January 2, 2006", olData.PublishDate)
+	books := make([]*Book, len(dbBooks))
+	for i, b := range dbBooks {
+		books[i] = dbToGraphQLBook(b)
+	}
+	return books, nil
+}
+
+// Series is the resolver for the series field.
+func (r *authorResolver) Series(ctx context.Context, obj *Author) ([]*Series, error) {
+	dbSeries, err := r.Store.GetSeriesByAuthor(ctx, int32(obj.ID))
+	if err != nil {
+		return nil, err
+	}
+
+	series := make([]*Series, len(dbSeries))
+	for i, s := range dbSeries {
+		series[i] = dbToGraphQLSeries(s)
+	}
+	return series, nil
+}
+
+// Author is the resolver for the author field.
+func (r *bookResolver) Author(ctx context.Context, obj *Book) (*Author, error) {
+	dbAuthor, err := r.Store.GetAuthor(ctx, int32(obj.AuthorID))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLAuthor(dbAuthor), nil
+}
+
+// Series is the resolver for the series field.
+func (r *bookResolver) Series(ctx context.Context, obj *Book) ([]*SeriesBook, error) {
+	dbSeriesBooks, err := r.Store.GetSeriesBooksByBookID(ctx, int32(obj.ID))
+	if err != nil {
+		return nil, err
+	}
+
+	seriesBooks := make([]*SeriesBook, len(dbSeriesBooks))
+	for i, sb := range dbSeriesBooks {
+		series, err := r.Store.GetSeries(ctx, sb.SeriesID)
 		if err != nil {
-			t, err = time.Parse("2006", olData.PublishDate)
+			return nil, err
 		}
-		if err == nil {
-			pubDate = pgtype.Date{Time: t, Valid: true}
+	seriesBooks[i] = &SeriesBook{
+			BookID:   int(obj.ID),
+			SeriesID: int(sb.SeriesID),
+			Series:   dbToGraphQLSeries(series),
+			Position: int(sb.Position),
 		}
 	}
-
-	isbn10 := ""
-	isbn13 := ""
-	for _, v := range olData.Identifiers.ISBN10 {
-		isbn10 = v
-		break
-	}
-	for _, v := range olData.Identifiers.ISBN13 {
-		isbn13 = v
-		break
-	}
-
-	var pages pgtype.Int4
-	if olData.NumberOfPages > 0 {
-		pages = pgtype.Int4{Int32: int32(olData.NumberOfPages), Valid: true}
-	}
-
-	book, err := r.Store.CreateBook(ctx, db.CreateBookParams{
-		Title:         olData.Title,
-		AuthorID:      author.ID,
-		Isbn:          pgtype.Text{String: isbn10, Valid: isbn10 != ""},
-		Isbn13:        pgtype.Text{String: isbn13, Valid: isbn13 != ""},
-		PublishedDate: pubDate,
-		PageCount:     pages,
-		Description:   pgtype.Text{Valid: false},
-		CoverUrl:      pgtype.Text{String: olData.Cover.Medium, Valid: olData.Cover.Medium != ""},
-		Owned:         true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	exists := false
-	return &ScanResult{
-		Book:          dbToGraphQLBook(book),
-		External:      olToExternalBook(olData),
-		AlreadyExists: &exists,
-	}, nil
+	return seriesBooks, nil
 }
 
-// LookupByIsbn is the resolver for the lookupByISBN field.
-func (r *queryResolver) LookupByIsbn(ctx context.Context, isbn string) (*ExternalBook, error) {
-	olData, err := r.OLClient.LookupByISBN(isbn)
+// Tags is the resolver for the tags field.
+func (r *bookResolver) Tags(ctx context.Context, obj *Book) ([]*Tag, error) {
+	dbTags, err := r.Store.GetBookTags(ctx, int32(obj.ID))
 	if err != nil {
 		return nil, err
 	}
-	if olData == nil {
-		return nil, nil
+
+	tags := make([]*Tag, len(dbTags))
+	for i, t := range dbTags {
+		tags[i] = dbToGraphQLTag(t)
 	}
-	return olToExternalBook(olData), nil
+	return tags, nil
 }
 
 // CreateBook is the resolver for the createBook field.
@@ -334,6 +239,8 @@ func (r *mutationResolver) AddBookToSeries(ctx context.Context, bookID int, seri
 	}
 
 	return &SeriesBook{
+		BookID:   int(sb.BookID),
+		SeriesID: int(sb.SeriesID),
 		Book:     dbToGraphQLBook(book),
 		Series:   dbToGraphQLSeries(series),
 		Position: int(sb.Position),
@@ -395,11 +302,98 @@ func (r *mutationResolver) RemoveTagFromBook(ctx context.Context, bookID int, ta
 	return dbToGraphQLBook(book), nil
 }
 
+// ScanAndAddBook is the resolver for the scanAndAddBook field.
+func (r *mutationResolver) ScanAndAddBook(ctx context.Context, isbn string) (*ScanResult, error) {
+	existing, err := r.Store.GetBookByISBN(ctx, pgtype.Text{String: isbn, Valid: true})
+	if err == nil {
+		exists := true
+		return &ScanResult{
+			Book:          dbToGraphQLBook(existing),
+			AlreadyExists: &exists,
+		}, nil
+	}
+
+	olData, err := r.OLClient.LookupByISBN(isbn)
+	if err != nil {
+		return nil, err
+	}
+	if olData == nil {
+		exists := false
+		return &ScanResult{
+			AlreadyExists: &exists,
+		}, nil
+	}
+
+	authorName := ""
+	if len(olData.Authors) > 0 {
+		authorName = olData.Authors[0].Name
+	}
+
+	author, err := r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
+		Name: authorName,
+		Bio:  pgtype.Text{Valid: false},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var pubDate pgtype.Date
+	if olData.PublishDate != "" {
+		t, err := time.Parse("January 2, 2006", olData.PublishDate)
+		if err != nil {
+			t, err = time.Parse("2006", olData.PublishDate)
+		}
+		if err == nil {
+			pubDate = pgtype.Date{Time: t, Valid: true}
+		}
+	}
+
+	isbn10 := ""
+	isbn13 := ""
+	for _, v := range olData.Identifiers.ISBN10 {
+		isbn10 = v
+		break
+	}
+	for _, v := range olData.Identifiers.ISBN13 {
+		isbn13 = v
+		break
+	}
+
+	var pages pgtype.Int4
+	if olData.NumberOfPages > 0 {
+		pages = pgtype.Int4{Int32: int32(olData.NumberOfPages), Valid: true}
+	}
+
+	book, err := r.Store.CreateBook(ctx, db.CreateBookParams{
+		Title:         olData.Title,
+		AuthorID:      author.ID,
+		Isbn:          pgtype.Text{String: isbn10, Valid: isbn10 != ""},
+		Isbn13:        pgtype.Text{String: isbn13, Valid: isbn13 != ""},
+		PublishedDate: pubDate,
+		PageCount:     pages,
+		Description:   pgtype.Text{Valid: false},
+		CoverUrl:      pgtype.Text{String: olData.Cover.Medium, Valid: olData.Cover.Medium != ""},
+		Owned:         true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	exists := false
+	return &ScanResult{
+		Book:          dbToGraphQLBook(book),
+		External:      olToExternalBook(olData),
+		AlreadyExists: &exists,
+	}, nil
+}
+
 // Books is the resolver for the books field.
-func (r *queryResolver) Books(ctx context.Context, owned *bool, authorID *int, tagID *int) ([]*Book, error) {
+func (r *queryResolver) Books(ctx context.Context, owned *bool, authorID *int, tagID *int, limit *int, offset *int) ([]*Book, error) {
 	dbBooks, err := r.Store.ListBooks(ctx, db.ListBooksParams{
 		Owned:    pgtype.Bool{Bool: ptrToBool(owned), Valid: owned != nil},
 		AuthorID: pgtype.Int4{Int32: int32(ptrToInt(authorID)), Valid: authorID != nil},
+		Limit:    pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset:   pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
 	})
 	if err != nil {
 		return nil, err
@@ -422,8 +416,11 @@ func (r *queryResolver) Book(ctx context.Context, id int) (*Book, error) {
 }
 
 // Authors is the resolver for the authors field.
-func (r *queryResolver) Authors(ctx context.Context) ([]*Author, error) {
-	dbAuthors, err := r.Store.ListAuthors(ctx)
+func (r *queryResolver) Authors(ctx context.Context, limit *int, offset *int) ([]*Author, error) {
+	dbAuthors, err := r.Store.ListAuthors(ctx, db.ListAuthorsParams{
+		Limit:  pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset: pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -445,8 +442,11 @@ func (r *queryResolver) Author(ctx context.Context, id int) (*Author, error) {
 }
 
 // Series is the resolver for the series field.
-func (r *queryResolver) Series(ctx context.Context) ([]*Series, error) {
-	dbSeries, err := r.Store.ListSeries(ctx)
+func (r *queryResolver) Series(ctx context.Context, limit *int, offset *int) ([]*Series, error) {
+	dbSeries, err := r.Store.ListSeries(ctx, db.ListSeriesParams{
+		Limit:  pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset: pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -548,9 +548,24 @@ func (r *queryResolver) SearchOpenLibrary(ctx context.Context, query string, lim
 	return results, nil
 }
 
+// LookupByIsbn is the resolver for the lookupByISBN field.
+func (r *queryResolver) LookupByIsbn(ctx context.Context, isbn string) (*ExternalBook, error) {
+	olData, err := r.OLClient.LookupByISBN(isbn)
+	if err != nil {
+		return nil, err
+	}
+	if olData == nil {
+		return nil, nil
+	}
+	return olToExternalBook(olData), nil
+}
+
 // Tags is the resolver for the tags field.
-func (r *queryResolver) Tags(ctx context.Context) ([]*Tag, error) {
-	dbTags, err := r.Store.ListTags(ctx)
+func (r *queryResolver) Tags(ctx context.Context, limit *int, offset *int) ([]*Tag, error) {
+	dbTags, err := r.Store.ListTags(ctx, db.ListTagsParams{
+		Limit:  pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset: pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -561,6 +576,87 @@ func (r *queryResolver) Tags(ctx context.Context) ([]*Tag, error) {
 	}
 	return tags, nil
 }
+
+// Books is the resolver for the books field.
+func (r *seriesResolver) Books(ctx context.Context, obj *Series) ([]*SeriesBook, error) {
+	dbSeriesBooks, err := r.Store.GetSeriesBooks(ctx, int32(obj.ID))
+	if err != nil {
+		return nil, err
+	}
+
+	seriesBooks := make([]*SeriesBook, len(dbSeriesBooks))
+	for i, sb := range dbSeriesBooks {
+		book, err := r.Store.GetBook(ctx, sb.BookID)
+		if err != nil {
+			return nil, err
+		}
+		seriesBooks[i] = &SeriesBook{
+			BookID:   int(sb.BookID),
+			SeriesID: int(sb.SeriesID),
+			Book:     dbToGraphQLBook(book),
+			Series:   obj,
+			Position: int(sb.Position),
+		}
+	}
+	return seriesBooks, nil
+}
+
+// MissingBooks is the resolver for the missingBooks field.
+func (r *seriesResolver) MissingBooks(ctx context.Context, obj *Series) ([]*Book, error) {
+	dbBooks, err := r.Store.GetMissingBooks(ctx, int32(obj.ID))
+	if err != nil {
+		return nil, err
+	}
+
+	books := make([]*Book, len(dbBooks))
+	for i, b := range dbBooks {
+		books[i] = dbToGraphQLBook(b)
+	}
+	return books, nil
+}
+
+// Book is the resolver for the book field.
+func (r *seriesBookResolver) Book(ctx context.Context, obj *SeriesBook) (*Book, error) {
+	book, err := r.Store.GetBook(ctx, int32(obj.BookID))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLBook(book), nil
+}
+
+// Series is the resolver for the series field.
+func (r *seriesBookResolver) Series(ctx context.Context, obj *SeriesBook) (*Series, error) {
+	series, err := r.Store.GetSeries(ctx, int32(obj.SeriesID))
+	if err != nil {
+		return nil, err
+	}
+	return dbToGraphQLSeries(series), nil
+}
+
+// Author returns AuthorResolver implementation.
+func (r *Resolver) Author() AuthorResolver { return &authorResolver{r} }
+
+// Book returns BookResolver implementation.
+func (r *Resolver) Book() BookResolver { return &bookResolver{r} }
+
+// Mutation returns MutationResolver implementation.
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+
+// Query returns QueryResolver implementation.
+func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
+
+// Series returns SeriesResolver implementation.
+func (r *Resolver) Series() SeriesResolver { return &seriesResolver{r} }
+
+// SeriesBook returns SeriesBookResolver implementation.
+func (r *Resolver) SeriesBook() SeriesBookResolver { return &seriesBookResolver{r} }
+
+type authorResolver struct{ *Resolver }
+type bookResolver struct{ *Resolver }
+type mutationResolver struct{ *Resolver }
+type queryResolver struct{ *Resolver }
+type seriesResolver struct{ *Resolver }
+type seriesBookResolver struct{ *Resolver }
 
 func dbToGraphQLSeries(s db.Series) *Series {
 	result := &Series{
@@ -578,6 +674,79 @@ func dbToGraphQLTag(t db.Tag) *Tag {
 		ID:   int(t.ID),
 		Name: t.Name,
 	}
+}
+
+func dbToGraphQLAuthor(a db.Author) *Author {
+	author := &Author{
+		ID:   int(a.ID),
+		Name: a.Name,
+	}
+	if a.Bio.Valid {
+		author.Bio = &a.Bio.String
+	}
+	return author
+}
+
+func dbToGraphQLBook(b db.Book) *Book {
+	book := &Book{
+		ID:       int(b.ID),
+		Title:    b.Title,
+		AuthorID: int(b.AuthorID),
+		Owned:    b.Owned,
+	}
+	if b.Isbn.Valid {
+		s := b.Isbn.String
+		book.Isbn = &s
+	}
+	if b.Isbn13.Valid {
+		s := b.Isbn13.String
+		book.Isbn13 = &s
+	}
+	if b.PublishedDate.Valid {
+		t := b.PublishedDate.Time
+		book.PublishedDate = &t
+	}
+	if b.PageCount.Valid {
+		n := int(b.PageCount.Int32)
+		book.PageCount = &n
+	}
+	if b.Description.Valid {
+		s := b.Description.String
+		book.Description = &s
+	}
+	if b.CoverUrl.Valid {
+		s := b.CoverUrl.String
+		book.CoverURL = &s
+	}
+	return book
+}
+
+func olToExternalBook(data *openlibrary.BookData) *ExternalBook {
+	result := &ExternalBook{}
+	if data.Title != "" {
+		result.Title = &data.Title
+	}
+	for _, a := range data.Authors {
+		name := a.Name
+		result.AuthorName = append(result.AuthorName, &name)
+	}
+	for _, isbn := range data.Identifiers.ISBN13 {
+		s := isbn
+		result.Isbn = append(result.Isbn, &s)
+	}
+	if len(result.Isbn) == 0 {
+		for _, isbn := range data.Identifiers.ISBN10 {
+			s := isbn
+			result.Isbn = append(result.Isbn, &s)
+		}
+	}
+	if data.URL != "" {
+		result.Key = &data.URL
+	}
+	if data.Cover.Medium != "" {
+		result.CoverID = &data.Cover.Medium
+	}
+	return result
 }
 
 func docToExternalBook(doc openlibrary.Doc) *ExternalBook {
@@ -644,12 +813,3 @@ func intToPgInt4(i *int) pgtype.Int4 {
 	}
 	return pgtype.Int4{Int32: int32(*i), Valid: true}
 }
-
-// Mutation returns MutationResolver implementation.
-func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
-
-// Query returns QueryResolver implementation.
-func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
-
-type mutationResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }

@@ -11,7 +11,9 @@ WHERE id = $1;
 -- name: ListTags :many
 SELECT id, name
 FROM tags
-ORDER BY name;
+ORDER BY name
+LIMIT sqlc.narg('limit')
+OFFSET sqlc.narg('offset');
 
 -- name: AddTagToBook :exec
 INSERT INTO book_tags (book_id, tag_id)

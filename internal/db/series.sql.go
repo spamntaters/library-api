@@ -190,14 +190,48 @@ func (q *Queries) GetSeriesBooks(ctx context.Context, seriesID int32) ([]GetSeri
 	return items, nil
 }
 
+const getSeriesBooksByBookID = `-- name: GetSeriesBooksByBookID :many
+SELECT series_id, book_id, position
+FROM series_books
+WHERE book_id = $1
+ORDER BY position
+`
+
+func (q *Queries) GetSeriesBooksByBookID(ctx context.Context, bookID int32) ([]SeriesBook, error) {
+	rows, err := q.db.Query(ctx, getSeriesBooksByBookID, bookID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeriesBook
+	for rows.Next() {
+		var i SeriesBook
+		if err := rows.Scan(&i.SeriesID, &i.BookID, &i.Position); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSeries = `-- name: ListSeries :many
 SELECT id, name, description, created_at, updated_at
 FROM series
 ORDER BY name
+LIMIT $2
+OFFSET $1
 `
 
-func (q *Queries) ListSeries(ctx context.Context) ([]Series, error) {
-	rows, err := q.db.Query(ctx, listSeries)
+type ListSeriesParams struct {
+	Offset pgtype.Int4
+	Limit  pgtype.Int4
+}
+
+func (q *Queries) ListSeries(ctx context.Context, arg ListSeriesParams) ([]Series, error) {
+	rows, err := q.db.Query(ctx, listSeries, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

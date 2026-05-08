@@ -13,7 +13,9 @@ SELECT id, title, author_id, isbn, isbn13, published_date, page_count, descripti
 FROM books
 WHERE (sqlc.narg(owned)::boolean IS NULL OR owned = sqlc.narg(owned))
   AND (sqlc.narg(author_id)::int IS NULL OR author_id = sqlc.narg(author_id))
-ORDER BY title;
+ORDER BY title
+LIMIT sqlc.narg('limit')
+OFFSET sqlc.narg('offset');
 
 -- name: UpdateBook :one
 UPDATE books

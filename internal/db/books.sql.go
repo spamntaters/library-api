@@ -127,15 +127,24 @@ FROM books
 WHERE ($1::boolean IS NULL OR owned = $1)
   AND ($2::int IS NULL OR author_id = $2)
 ORDER BY title
+LIMIT $4
+OFFSET $3
 `
 
 type ListBooksParams struct {
 	Owned    pgtype.Bool
 	AuthorID pgtype.Int4
+	Offset   pgtype.Int4
+	Limit    pgtype.Int4
 }
 
 func (q *Queries) ListBooks(ctx context.Context, arg ListBooksParams) ([]Book, error) {
-	rows, err := q.db.Query(ctx, listBooks, arg.Owned, arg.AuthorID)
+	rows, err := q.db.Query(ctx, listBooks,
+		arg.Owned,
+		arg.AuthorID,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

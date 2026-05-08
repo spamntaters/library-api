@@ -64,14 +64,96 @@ func (q *Queries) GetAuthor(ctx context.Context, id int32) (Author, error) {
 	return i, err
 }
 
+const getBooksByAuthor = `-- name: GetBooksByAuthor :many
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+FROM books
+WHERE author_id = $1
+ORDER BY title
+`
+
+func (q *Queries) GetBooksByAuthor(ctx context.Context, authorID int32) ([]Book, error) {
+	rows, err := q.db.Query(ctx, getBooksByAuthor, authorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Book
+	for rows.Next() {
+		var i Book
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.AuthorID,
+			&i.Isbn,
+			&i.Isbn13,
+			&i.PublishedDate,
+			&i.PageCount,
+			&i.Description,
+			&i.CoverUrl,
+			&i.Owned,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSeriesByAuthor = `-- name: GetSeriesByAuthor :many
+SELECT DISTINCT s.id, s.name, s.description, s.created_at, s.updated_at
+FROM series s
+JOIN series_books sb ON sb.series_id = s.id
+JOIN books b ON b.id = sb.book_id
+WHERE b.author_id = $1
+ORDER BY s.name
+`
+
+func (q *Queries) GetSeriesByAuthor(ctx context.Context, authorID int32) ([]Series, error) {
+	rows, err := q.db.Query(ctx, getSeriesByAuthor, authorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Series
+	for rows.Next() {
+		var i Series
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuthors = `-- name: ListAuthors :many
 SELECT id, name, bio, created_at, updated_at
 FROM authors
 ORDER BY name
+LIMIT $2
+OFFSET $1
 `
 
-func (q *Queries) ListAuthors(ctx context.Context) ([]Author, error) {
-	rows, err := q.db.Query(ctx, listAuthors)
+type ListAuthorsParams struct {
+	Offset pgtype.Int4
+	Limit  pgtype.Int4
+}
+
+func (q *Queries) ListAuthors(ctx context.Context, arg ListAuthorsParams) ([]Author, error) {
+	rows, err := q.db.Query(ctx, listAuthors, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

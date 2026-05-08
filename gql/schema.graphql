@@ -1,9 +1,11 @@
+directive @goField(forceResolver: Boolean, name: String, skipModelGen: Boolean) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+
 type Author {
 	id: ID!
 	name: String!
 	bio: String
-	books: [Book!]!
-	series: [Series!]!
+	books: [Book!]! @goField(forceResolver: true)
+	series: [Series!]! @goField(forceResolver: true)
 }
 
 type Book {
@@ -16,22 +18,25 @@ type Book {
 	description: String
 	coverURL: String
 	owned: Boolean!
-	author: Author!
-	series: [SeriesBook!]!
-	tags: [Tag!]!
+	authorID: ID!
+	author: Author! @goField(forceResolver: true)
+	series: [SeriesBook!]! @goField(forceResolver: true)
+	tags: [Tag!]! @goField(forceResolver: true)
 }
 
 type Series {
 	id: ID!
 	name: String!
 	description: String
-	books: [SeriesBook!]!
-	missingBooks: [Book!]!
+	books: [SeriesBook!]! @goField(forceResolver: true)
+	missingBooks: [Book!]! @goField(forceResolver: true)
 }
 
 type SeriesBook {
-	book: Book!
-	series: Series!
+	bookID: ID!
+	seriesID: ID!
+	book: Book! @goField(forceResolver: true)
+	series: Series! @goField(forceResolver: true)
 	position: Int!
 }
 
@@ -56,18 +61,18 @@ type ScanResult {
 }
 
 type Query {
-	books(owned: Boolean, authorID: ID, tagID: ID): [Book!]!
+	books(owned: Boolean, authorID: ID, tagID: ID, limit: Int, offset: Int): [Book!]!
 	book(id: ID!): Book
-	authors: [Author!]!
+	authors(limit: Int, offset: Int): [Author!]!
 	author(id: ID!): Author
-	series: [Series!]!
+	series(limit: Int, offset: Int): [Series!]!
 	seriesByID(id: ID!): Series
 	seriesMissingBooks(seriesID: ID!): [Book!]!
 	similarBooks(bookID: ID!, limit: Int): [ExternalBook!]!
 	similarSeries(seriesID: ID!, limit: Int): [ExternalBook!]!
 	searchOpenLibrary(query: String!, limit: Int): [ExternalBook!]!
 	lookupByISBN(isbn: String!): ExternalBook
-	tags: [Tag!]!
+	tags(limit: Int, offset: Int): [Tag!]!
 }
 
 type Mutation {

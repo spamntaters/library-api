@@ -11,7 +11,9 @@ WHERE id = $1;
 -- name: ListSeries :many
 SELECT id, name, description, created_at, updated_at
 FROM series
-ORDER BY name;
+ORDER BY name
+LIMIT sqlc.narg('limit')
+OFFSET sqlc.narg('offset');
 
 -- name: UpdateSeries :one
 UPDATE series
@@ -51,3 +53,9 @@ FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1 AND b.owned = false
 ORDER BY sb.position;
+
+-- name: GetSeriesBooksByBookID :many
+SELECT series_id, book_id, position
+FROM series_books
+WHERE book_id = $1
+ORDER BY position;

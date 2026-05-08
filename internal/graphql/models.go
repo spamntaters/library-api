@@ -24,6 +24,7 @@ type Book struct {
 	Description   *string       `json:"description,omitempty"`
 	CoverURL      *string       `json:"coverURL,omitempty"`
 	Owned         bool          `json:"owned"`
+	AuthorID      int           `json:"authorID"`
 	Author        *Author       `json:"author"`
 	Series        []*SeriesBook `json:"series"`
 	Tags          []*Tag        `json:"tags"`
@@ -80,6 +81,8 @@ type Series struct {
 }
 
 type SeriesBook struct {
+	BookID   int     `json:"bookID"`
+	SeriesID int     `json:"seriesID"`
 	Book     *Book   `json:"book"`
 	Series   *Series `json:"series"`
 	Position int     `json:"position"`

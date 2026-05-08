@@ -9,9 +9,11 @@ import (
 type Querier interface {
 	CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Author, error)
 	GetAuthor(ctx context.Context, id int32) (Author, error)
-	ListAuthors(ctx context.Context) ([]Author, error)
+	ListAuthors(ctx context.Context, arg ListAuthorsParams) ([]Author, error)
 	UpdateAuthor(ctx context.Context, arg UpdateAuthorParams) (Author, error)
 	DeleteAuthor(ctx context.Context, id int32) error
+	GetBooksByAuthor(ctx context.Context, authorID int32) ([]Book, error)
+	GetSeriesByAuthor(ctx context.Context, authorID int32) ([]Series, error)
 
 	CreateBook(ctx context.Context, arg CreateBookParams) (Book, error)
 	GetBook(ctx context.Context, id int32) (Book, error)
@@ -23,17 +25,18 @@ type Querier interface {
 
 	CreateSeries(ctx context.Context, arg CreateSeriesParams) (Series, error)
 	GetSeries(ctx context.Context, id int32) (Series, error)
-	ListSeries(ctx context.Context) ([]Series, error)
+	ListSeries(ctx context.Context, arg ListSeriesParams) ([]Series, error)
 	UpdateSeries(ctx context.Context, arg UpdateSeriesParams) (Series, error)
 	DeleteSeries(ctx context.Context, id int32) error
 	AddBookToSeries(ctx context.Context, arg AddBookToSeriesParams) (SeriesBook, error)
 	RemoveBookFromSeries(ctx context.Context, arg RemoveBookFromSeriesParams) error
 	GetSeriesBooks(ctx context.Context, seriesID int32) ([]GetSeriesBooksRow, error)
 	GetMissingBooks(ctx context.Context, seriesID int32) ([]Book, error)
+	GetSeriesBooksByBookID(ctx context.Context, bookID int32) ([]SeriesBook, error)
 
 	CreateTag(ctx context.Context, name string) (Tag, error)
 	GetTag(ctx context.Context, id int32) (Tag, error)
-	ListTags(ctx context.Context) ([]Tag, error)
+	ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, error)
 	AddTagToBook(ctx context.Context, arg AddTagToBookParams) error
 	RemoveTagFromBook(ctx context.Context, arg RemoveTagFromBookParams) error
 	GetBookTags(ctx context.Context, bookID int32) ([]Tag, error)

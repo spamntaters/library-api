@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addTagToBook = `-- name: AddTagToBook :exec
@@ -82,10 +84,17 @@ const listTags = `-- name: ListTags :many
 SELECT id, name
 FROM tags
 ORDER BY name
+LIMIT $2
+OFFSET $1
 `
 
-func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
-	rows, err := q.db.Query(ctx, listTags)
+type ListTagsParams struct {
+	Offset pgtype.Int4
+	Limit  pgtype.Int4
+}
+
+func (q *Queries) ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, error) {
+	rows, err := q.db.Query(ctx, listTags, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

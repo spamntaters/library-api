@@ -23,8 +23,8 @@ func (m *MockStore) GetAuthor(ctx context.Context, id int32) (db.Author, error) 
 	return args.Get(0).(db.Author), args.Error(1)
 }
 
-func (m *MockStore) ListAuthors(ctx context.Context) ([]db.Author, error) {
-	args := m.Called(ctx)
+func (m *MockStore) ListAuthors(ctx context.Context, arg db.ListAuthorsParams) ([]db.Author, error) {
+	args := m.Called(ctx, arg)
 	return args.Get(0).([]db.Author), args.Error(1)
 }
 
@@ -36,6 +36,16 @@ func (m *MockStore) UpdateAuthor(ctx context.Context, arg db.UpdateAuthorParams)
 func (m *MockStore) DeleteAuthor(ctx context.Context, id int32) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
+}
+
+func (m *MockStore) GetBooksByAuthor(ctx context.Context, authorID int32) ([]db.Book, error) {
+	args := m.Called(ctx, authorID)
+	return args.Get(0).([]db.Book), args.Error(1)
+}
+
+func (m *MockStore) GetSeriesByAuthor(ctx context.Context, authorID int32) ([]db.Series, error) {
+	args := m.Called(ctx, authorID)
+	return args.Get(0).([]db.Series), args.Error(1)
 }
 
 func (m *MockStore) CreateBook(ctx context.Context, arg db.CreateBookParams) (db.Book, error) {
@@ -83,8 +93,8 @@ func (m *MockStore) GetSeries(ctx context.Context, id int32) (db.Series, error) 
 	return args.Get(0).(db.Series), args.Error(1)
 }
 
-func (m *MockStore) ListSeries(ctx context.Context) ([]db.Series, error) {
-	args := m.Called(ctx)
+func (m *MockStore) ListSeries(ctx context.Context, arg db.ListSeriesParams) ([]db.Series, error) {
+	args := m.Called(ctx, arg)
 	return args.Get(0).([]db.Series), args.Error(1)
 }
 
@@ -118,6 +128,11 @@ func (m *MockStore) GetMissingBooks(ctx context.Context, seriesID int32) ([]db.B
 	return args.Get(0).([]db.Book), args.Error(1)
 }
 
+func (m *MockStore) GetSeriesBooksByBookID(ctx context.Context, bookID int32) ([]db.SeriesBook, error) {
+	args := m.Called(ctx, bookID)
+	return args.Get(0).([]db.SeriesBook), args.Error(1)
+}
+
 func (m *MockStore) CreateTag(ctx context.Context, name string) (db.Tag, error) {
 	args := m.Called(ctx, name)
 	return args.Get(0).(db.Tag), args.Error(1)
@@ -128,8 +143,8 @@ func (m *MockStore) GetTag(ctx context.Context, id int32) (db.Tag, error) {
 	return args.Get(0).(db.Tag), args.Error(1)
 }
 
-func (m *MockStore) ListTags(ctx context.Context) ([]db.Tag, error) {
-	args := m.Called(ctx)
+func (m *MockStore) ListTags(ctx context.Context, arg db.ListTagsParams) ([]db.Tag, error) {
+	args := m.Called(ctx, arg)
 	return args.Get(0).([]db.Tag), args.Error(1)
 }
 

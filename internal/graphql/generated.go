@@ -28,8 +28,12 @@ func NewExecutableSchema(cfg Config) graphql.ExecutableSchema {
 type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 
 type ResolverRoot interface {
+	Author() AuthorResolver
+	Book() BookResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
+	Series() SeriesResolver
+	SeriesBook() SeriesBookResolver
 }
 
 type DirectiveRoot struct {
@@ -46,6 +50,7 @@ type ComplexityRoot struct {
 
 	Book struct {
 		Author        func(childComplexity int) int
+		AuthorID      func(childComplexity int) int
 		CoverURL      func(childComplexity int) int
 		Description   func(childComplexity int) int
 		ID            func(childComplexity int) int
@@ -89,17 +94,17 @@ type ComplexityRoot struct {
 
 	Query struct {
 		Author             func(childComplexity int, id int) int
-		Authors            func(childComplexity int) int
+		Authors            func(childComplexity int, limit *int, offset *int) int
 		Book               func(childComplexity int, id int) int
-		Books              func(childComplexity int, owned *bool, authorID *int, tagID *int) int
+		Books              func(childComplexity int, owned *bool, authorID *int, tagID *int, limit *int, offset *int) int
 		LookupByIsbn       func(childComplexity int, isbn string) int
 		SearchOpenLibrary  func(childComplexity int, query string, limit *int) int
-		Series             func(childComplexity int) int
+		Series             func(childComplexity int, limit *int, offset *int) int
 		SeriesByID         func(childComplexity int, id int) int
 		SeriesMissingBooks func(childComplexity int, seriesID int) int
 		SimilarBooks       func(childComplexity int, bookID int, limit *int) int
 		SimilarSeries      func(childComplexity int, seriesID int, limit *int) int
-		Tags               func(childComplexity int) int
+		Tags               func(childComplexity int, limit *int, offset *int) int
 	}
 
 	ScanResult struct {
@@ -118,8 +123,10 @@ type ComplexityRoot struct {
 
 	SeriesBook struct {
 		Book     func(childComplexity int) int
+		BookID   func(childComplexity int) int
 		Position func(childComplexity int) int
 		Series   func(childComplexity int) int
+		SeriesID func(childComplexity int) int
 	}
 
 	Tag struct {
@@ -128,6 +135,15 @@ type ComplexityRoot struct {
 	}
 }
 
+type AuthorResolver interface {
+	Books(ctx context.Context, obj *Author) ([]*Book, error)
+	Series(ctx context.Context, obj *Author) ([]*Series, error)
+}
+type BookResolver interface {
+	Author(ctx context.Context, obj *Book) (*Author, error)
+	Series(ctx context.Context, obj *Book) ([]*SeriesBook, error)
+	Tags(ctx context.Context, obj *Book) ([]*Tag, error)
+}
 type MutationResolver interface {
 	CreateBook(ctx context.Context, input CreateBookInput) (*Book, error)
 	UpdateBook(ctx context.Context, id int, input UpdateBookInput) (*Book, error)
@@ -147,18 +163,26 @@ type MutationResolver interface {
 	ScanAndAddBook(ctx context.Context, isbn string) (*ScanResult, error)
 }
 type QueryResolver interface {
-	Books(ctx context.Context, owned *bool, authorID *int, tagID *int) ([]*Book, error)
+	Books(ctx context.Context, owned *bool, authorID *int, tagID *int, limit *int, offset *int) ([]*Book, error)
 	Book(ctx context.Context, id int) (*Book, error)
-	Authors(ctx context.Context) ([]*Author, error)
+	Authors(ctx context.Context, limit *int, offset *int) ([]*Author, error)
 	Author(ctx context.Context, id int) (*Author, error)
-	Series(ctx context.Context) ([]*Series, error)
+	Series(ctx context.Context, limit *int, offset *int) ([]*Series, error)
 	SeriesByID(ctx context.Context, id int) (*Series, error)
 	SeriesMissingBooks(ctx context.Context, seriesID int) ([]*Book, error)
 	SimilarBooks(ctx context.Context, bookID int, limit *int) ([]*ExternalBook, error)
 	SimilarSeries(ctx context.Context, seriesID int, limit *int) ([]*ExternalBook, error)
 	SearchOpenLibrary(ctx context.Context, query string, limit *int) ([]*ExternalBook, error)
 	LookupByIsbn(ctx context.Context, isbn string) (*ExternalBook, error)
-	Tags(ctx context.Context) ([]*Tag, error)
+	Tags(ctx context.Context, limit *int, offset *int) ([]*Tag, error)
+}
+type SeriesResolver interface {
+	Books(ctx context.Context, obj *Series) ([]*SeriesBook, error)
+	MissingBooks(ctx context.Context, obj *Series) ([]*Book, error)
+}
+type SeriesBookResolver interface {
+	Book(ctx context.Context, obj *SeriesBook) (*Book, error)
+	Series(ctx context.Context, obj *SeriesBook) (*Series, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -212,6 +236,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Book.Author(childComplexity), true
+	case "Book.authorID":
+		if e.ComplexityRoot.Book.AuthorID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Book.AuthorID(childComplexity), true
 	case "Book.coverURL":
 		if e.ComplexityRoot.Book.CoverURL == nil {
 			break
@@ -509,7 +539,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.ComplexityRoot.Query.Authors(childComplexity), true
+		args, err := ec.field_Query_authors_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Authors(childComplexity, args["limit"].(*int), args["offset"].(*int)), true
 	case "Query.book":
 		if e.ComplexityRoot.Query.Book == nil {
 			break
@@ -531,7 +566,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Books(childComplexity, args["owned"].(*bool), args["authorID"].(*int), args["tagID"].(*int)), true
+		return e.ComplexityRoot.Query.Books(childComplexity, args["owned"].(*bool), args["authorID"].(*int), args["tagID"].(*int), args["limit"].(*int), args["offset"].(*int)), true
 
 	case "Query.lookupByISBN":
 		if e.ComplexityRoot.Query.LookupByIsbn == nil {
@@ -560,7 +595,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.ComplexityRoot.Query.Series(childComplexity), true
+		args, err := ec.field_Query_series_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Series(childComplexity, args["limit"].(*int), args["offset"].(*int)), true
 	case "Query.seriesByID":
 		if e.ComplexityRoot.Query.SeriesByID == nil {
 			break
@@ -610,7 +650,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.ComplexityRoot.Query.Tags(childComplexity), true
+		args, err := ec.field_Query_tags_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Tags(childComplexity, args["limit"].(*int), args["offset"].(*int)), true
 
 	case "ScanResult.alreadyExists":
 		if e.ComplexityRoot.ScanResult.AlreadyExists == nil {
@@ -668,6 +713,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SeriesBook.Book(childComplexity), true
+	case "SeriesBook.bookID":
+		if e.ComplexityRoot.SeriesBook.BookID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SeriesBook.BookID(childComplexity), true
 	case "SeriesBook.position":
 		if e.ComplexityRoot.SeriesBook.Position == nil {
 			break
@@ -680,6 +731,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SeriesBook.Series(childComplexity), true
+	case "SeriesBook.seriesID":
+		if e.ComplexityRoot.SeriesBook.SeriesID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SeriesBook.SeriesID(childComplexity), true
 
 	case "Tag.id":
 		if e.ComplexityRoot.Tag.ID == nil {
@@ -783,12 +840,14 @@ func newExecutionContext(
 }
 
 var sources = []*ast.Source{
-	{Name: "../../gql/schema.graphql", Input: `type Author {
+	{Name: "../../gql/schema.graphql", Input: `directive @goField(forceResolver: Boolean, name: String, skipModelGen: Boolean) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+
+type Author {
 	id: ID!
 	name: String!
 	bio: String
-	books: [Book!]!
-	series: [Series!]!
+	books: [Book!]! @goField(forceResolver: true)
+	series: [Series!]! @goField(forceResolver: true)
 }
 
 type Book {
@@ -801,22 +860,25 @@ type Book {
 	description: String
 	coverURL: String
 	owned: Boolean!
-	author: Author!
-	series: [SeriesBook!]!
-	tags: [Tag!]!
+	authorID: ID!
+	author: Author! @goField(forceResolver: true)
+	series: [SeriesBook!]! @goField(forceResolver: true)
+	tags: [Tag!]! @goField(forceResolver: true)
 }
 
 type Series {
 	id: ID!
 	name: String!
 	description: String
-	books: [SeriesBook!]!
-	missingBooks: [Book!]!
+	books: [SeriesBook!]! @goField(forceResolver: true)
+	missingBooks: [Book!]! @goField(forceResolver: true)
 }
 
 type SeriesBook {
-	book: Book!
-	series: Series!
+	bookID: ID!
+	seriesID: ID!
+	book: Book! @goField(forceResolver: true)
+	series: Series! @goField(forceResolver: true)
 	position: Int!
 }
 
@@ -841,18 +903,18 @@ type ScanResult {
 }
 
 type Query {
-	books(owned: Boolean, authorID: ID, tagID: ID): [Book!]!
+	books(owned: Boolean, authorID: ID, tagID: ID, limit: Int, offset: Int): [Book!]!
 	book(id: ID!): Book
-	authors: [Author!]!
+	authors(limit: Int, offset: Int): [Author!]!
 	author(id: ID!): Author
-	series: [Series!]!
+	series(limit: Int, offset: Int): [Series!]!
 	seriesByID(id: ID!): Series
 	seriesMissingBooks(seriesID: ID!): [Book!]!
 	similarBooks(bookID: ID!, limit: Int): [ExternalBook!]!
 	similarSeries(seriesID: ID!, limit: Int): [ExternalBook!]!
 	searchOpenLibrary(query: String!, limit: Int): [ExternalBook!]!
 	lookupByISBN(isbn: String!): ExternalBook
-	tags: [Tag!]!
+	tags(limit: Int, offset: Int): [Tag!]!
 }
 
 type Mutation {
@@ -959,6 +1021,8 @@ func (ec *executionContext) childFields_Book(ctx context.Context, field graphql.
 		return ec.fieldContext_Book_coverURL(ctx, field)
 	case "owned":
 		return ec.fieldContext_Book_owned(ctx, field)
+	case "authorID":
+		return ec.fieldContext_Book_authorID(ctx, field)
 	case "author":
 		return ec.fieldContext_Book_author(ctx, field)
 	case "series":
@@ -1017,6 +1081,10 @@ func (ec *executionContext) childFields_Series(ctx context.Context, field graphq
 
 func (ec *executionContext) childFields_SeriesBook(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
+	case "bookID":
+		return ec.fieldContext_SeriesBook_bookID(ctx, field)
+	case "seriesID":
+		return ec.fieldContext_SeriesBook_seriesID(ctx, field)
 	case "book":
 		return ec.fieldContext_SeriesBook_book(ctx, field)
 	case "series":
@@ -1469,6 +1537,28 @@ func (ec *executionContext) field_Query_author_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_authors_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_book_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1510,6 +1600,22 @@ func (ec *executionContext) field_Query_books_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["tagID"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg4
 	return args, nil
 }
 
@@ -1577,6 +1683,28 @@ func (ec *executionContext) field_Query_seriesMissingBooks_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_series_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_similarBooks_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1618,6 +1746,28 @@ func (ec *executionContext) field_Query_similarSeries_args(ctx context.Context, 
 		return nil, err
 	}
 	args["limit"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_tags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
 	return args, nil
 }
 
@@ -1763,7 +1913,7 @@ func (ec *executionContext) _Author_books(ctx context.Context, field graphql.Col
 			return ec.fieldContext_Author_books(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Books, nil
+			return ec.Resolvers.Author().Books(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Book) graphql.Marshaler {
@@ -1777,8 +1927,8 @@ func (ec *executionContext) fieldContext_Author_books(_ context.Context, field g
 	fc = &graphql.FieldContext{
 		Object:     "Author",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Book(ctx, field)
 		},
@@ -1795,7 +1945,7 @@ func (ec *executionContext) _Author_series(ctx context.Context, field graphql.Co
 			return ec.fieldContext_Author_series(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Series, nil
+			return ec.Resolvers.Author().Series(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Series) graphql.Marshaler {
@@ -1809,8 +1959,8 @@ func (ec *executionContext) fieldContext_Author_series(_ context.Context, field 
 	fc = &graphql.FieldContext{
 		Object:     "Author",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Series(ctx, field)
 		},
@@ -2025,6 +2175,29 @@ func (ec *executionContext) fieldContext_Book_owned(_ context.Context, field gra
 	return graphql.NewScalarFieldContext("Book", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Book_authorID(ctx context.Context, field graphql.CollectedField, obj *Book) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Book_authorID(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AuthorID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNID2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Book_authorID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Book", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
 func (ec *executionContext) _Book_author(ctx context.Context, field graphql.CollectedField, obj *Book) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2034,7 +2207,7 @@ func (ec *executionContext) _Book_author(ctx context.Context, field graphql.Coll
 			return ec.fieldContext_Book_author(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Author, nil
+			return ec.Resolvers.Book().Author(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *Author) graphql.Marshaler {
@@ -2048,8 +2221,8 @@ func (ec *executionContext) fieldContext_Book_author(_ context.Context, field gr
 	fc = &graphql.FieldContext{
 		Object:     "Book",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Author(ctx, field)
 		},
@@ -2066,7 +2239,7 @@ func (ec *executionContext) _Book_series(ctx context.Context, field graphql.Coll
 			return ec.fieldContext_Book_series(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Series, nil
+			return ec.Resolvers.Book().Series(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*SeriesBook) graphql.Marshaler {
@@ -2080,8 +2253,8 @@ func (ec *executionContext) fieldContext_Book_series(_ context.Context, field gr
 	fc = &graphql.FieldContext{
 		Object:     "Book",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_SeriesBook(ctx, field)
 		},
@@ -2098,7 +2271,7 @@ func (ec *executionContext) _Book_tags(ctx context.Context, field graphql.Collec
 			return ec.fieldContext_Book_tags(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Tags, nil
+			return ec.Resolvers.Book().Tags(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Tag) graphql.Marshaler {
@@ -2112,8 +2285,8 @@ func (ec *executionContext) fieldContext_Book_tags(_ context.Context, field grap
 	fc = &graphql.FieldContext{
 		Object:     "Book",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Tag(ctx, field)
 		},
@@ -2973,7 +3146,7 @@ func (ec *executionContext) _Query_books(ctx context.Context, field graphql.Coll
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Books(ctx, fc.Args["owned"].(*bool), fc.Args["authorID"].(*int), fc.Args["tagID"].(*int))
+			return ec.Resolvers.Query().Books(ctx, fc.Args["owned"].(*bool), fc.Args["authorID"].(*int), fc.Args["tagID"].(*int), fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Book) graphql.Marshaler {
@@ -3060,7 +3233,8 @@ func (ec *executionContext) _Query_authors(ctx context.Context, field graphql.Co
 			return ec.fieldContext_Query_authors(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Query().Authors(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Authors(ctx, fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Author) graphql.Marshaler {
@@ -3070,7 +3244,7 @@ func (ec *executionContext) _Query_authors(ctx context.Context, field graphql.Co
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Query_authors(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_authors(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -3079,6 +3253,17 @@ func (ec *executionContext) fieldContext_Query_authors(_ context.Context, field 
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Author(ctx, field)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_authors_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -3136,7 +3321,8 @@ func (ec *executionContext) _Query_series(ctx context.Context, field graphql.Col
 			return ec.fieldContext_Query_series(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Query().Series(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Series(ctx, fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Series) graphql.Marshaler {
@@ -3146,7 +3332,7 @@ func (ec *executionContext) _Query_series(ctx context.Context, field graphql.Col
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Query_series(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_series(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -3155,6 +3341,17 @@ func (ec *executionContext) fieldContext_Query_series(_ context.Context, field g
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Series(ctx, field)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_series_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -3432,7 +3629,8 @@ func (ec *executionContext) _Query_tags(ctx context.Context, field graphql.Colle
 			return ec.fieldContext_Query_tags(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Query().Tags(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Tags(ctx, fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Tag) graphql.Marshaler {
@@ -3442,7 +3640,7 @@ func (ec *executionContext) _Query_tags(ctx context.Context, field graphql.Colle
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Query_tags(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_tags(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -3451,6 +3649,17 @@ func (ec *executionContext) fieldContext_Query_tags(_ context.Context, field gra
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Tag(ctx, field)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_tags_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -3696,7 +3905,7 @@ func (ec *executionContext) _Series_books(ctx context.Context, field graphql.Col
 			return ec.fieldContext_Series_books(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Books, nil
+			return ec.Resolvers.Series().Books(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*SeriesBook) graphql.Marshaler {
@@ -3710,8 +3919,8 @@ func (ec *executionContext) fieldContext_Series_books(_ context.Context, field g
 	fc = &graphql.FieldContext{
 		Object:     "Series",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_SeriesBook(ctx, field)
 		},
@@ -3728,7 +3937,7 @@ func (ec *executionContext) _Series_missingBooks(ctx context.Context, field grap
 			return ec.fieldContext_Series_missingBooks(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.MissingBooks, nil
+			return ec.Resolvers.Series().MissingBooks(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Book) graphql.Marshaler {
@@ -3742,13 +3951,59 @@ func (ec *executionContext) fieldContext_Series_missingBooks(_ context.Context, 
 	fc = &graphql.FieldContext{
 		Object:     "Series",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Book(ctx, field)
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _SeriesBook_bookID(ctx context.Context, field graphql.CollectedField, obj *SeriesBook) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SeriesBook_bookID(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BookID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNID2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SeriesBook_bookID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SeriesBook", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SeriesBook_seriesID(ctx context.Context, field graphql.CollectedField, obj *SeriesBook) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SeriesBook_seriesID(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SeriesID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNID2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SeriesBook_seriesID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SeriesBook", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
 func (ec *executionContext) _SeriesBook_book(ctx context.Context, field graphql.CollectedField, obj *SeriesBook) (ret graphql.Marshaler) {
@@ -3760,7 +4015,7 @@ func (ec *executionContext) _SeriesBook_book(ctx context.Context, field graphql.
 			return ec.fieldContext_SeriesBook_book(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Book, nil
+			return ec.Resolvers.SeriesBook().Book(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *Book) graphql.Marshaler {
@@ -3774,8 +4029,8 @@ func (ec *executionContext) fieldContext_SeriesBook_book(_ context.Context, fiel
 	fc = &graphql.FieldContext{
 		Object:     "SeriesBook",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Book(ctx, field)
 		},
@@ -3792,7 +4047,7 @@ func (ec *executionContext) _SeriesBook_series(ctx context.Context, field graphq
 			return ec.fieldContext_SeriesBook_series(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Series, nil
+			return ec.Resolvers.SeriesBook().Series(ctx, obj)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *Series) graphql.Marshaler {
@@ -3806,8 +4061,8 @@ func (ec *executionContext) fieldContext_SeriesBook_series(_ context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "SeriesBook",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Series(ctx, field)
 		},
@@ -5257,25 +5512,87 @@ func (ec *executionContext) _Author(ctx context.Context, sel ast.SelectionSet, o
 		case "id":
 			out.Values[i] = ec._Author_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "name":
 			out.Values[i] = ec._Author_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "bio":
 			out.Values[i] = ec._Author_bio(ctx, field, obj)
 		case "books":
-			out.Values[i] = ec._Author_books(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Author_books(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "series":
-			out.Values[i] = ec._Author_series(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Author_series(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5313,12 +5630,12 @@ func (ec *executionContext) _Book(ctx context.Context, sel ast.SelectionSet, obj
 		case "id":
 			out.Values[i] = ec._Book_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "title":
 			out.Values[i] = ec._Book_title(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "isbn":
 			out.Values[i] = ec._Book_isbn(ctx, field, obj)
@@ -5335,23 +5652,121 @@ func (ec *executionContext) _Book(ctx context.Context, sel ast.SelectionSet, obj
 		case "owned":
 			out.Values[i] = ec._Book_owned(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "authorID":
+			out.Values[i] = ec._Book_authorID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "author":
-			out.Values[i] = ec._Book_author(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Book_author(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "series":
-			out.Values[i] = ec._Book_series(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Book_series(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "tags":
-			out.Values[i] = ec._Book_tags(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Book_tags(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5931,25 +6346,87 @@ func (ec *executionContext) _Series(ctx context.Context, sel ast.SelectionSet, o
 		case "id":
 			out.Values[i] = ec._Series_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "name":
 			out.Values[i] = ec._Series_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "description":
 			out.Values[i] = ec._Series_description(ctx, field, obj)
 		case "books":
-			out.Values[i] = ec._Series_books(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Series_books(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "missingBooks":
-			out.Values[i] = ec._Series_missingBooks(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Series_missingBooks(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5984,20 +6461,92 @@ func (ec *executionContext) _SeriesBook(ctx context.Context, sel ast.SelectionSe
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("SeriesBook")
+		case "bookID":
+			out.Values[i] = ec._SeriesBook_bookID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "seriesID":
+			out.Values[i] = ec._SeriesBook_seriesID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "book":
-			out.Values[i] = ec._SeriesBook_book(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SeriesBook_book(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "series":
-			out.Values[i] = ec._SeriesBook_series(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._SeriesBook_series(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "position":
 			out.Values[i] = ec._SeriesBook_position(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))

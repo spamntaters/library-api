@@ -23,7 +23,7 @@ func TestQuery_Books_NoFilters(t *testing.T) {
 
 	store.On("ListBooks", mock.Anything, mock.Anything).Return(books, nil)
 
-	result, err := resolver.Query().Books(context.Background(), nil, nil, nil)
+	result, err := resolver.Query().Books(context.Background(), nil, nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -43,7 +43,7 @@ func TestQuery_Books_FilterOwned(t *testing.T) {
 		return arg.Owned.Valid && arg.Owned.Bool
 	})).Return(books, nil)
 
-	result, err := resolver.Query().Books(context.Background(), boolPtr(true), nil, nil)
+	result, err := resolver.Query().Books(context.Background(), boolPtr(true), nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -62,7 +62,7 @@ func TestQuery_Books_FilterByAuthor(t *testing.T) {
 		return arg.AuthorID.Valid && arg.AuthorID.Int32 == 5
 	})).Return(books, nil)
 
-	result, err := resolver.Query().Books(context.Background(), nil, intPtr(5), nil)
+	result, err := resolver.Query().Books(context.Background(), nil, intPtr(5), nil, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
@@ -74,7 +74,7 @@ func TestQuery_Books_Error(t *testing.T) {
 
 	store.On("ListBooks", mock.Anything, mock.Anything).Return([]db.Book{}, errors.New("db error"))
 
-	result, err := resolver.Query().Books(context.Background(), nil, nil, nil)
+	result, err := resolver.Query().Books(context.Background(), nil, nil, nil, nil, nil)
 
 	require.Error(t, err)
 	assert.Nil(t, result)
@@ -119,9 +119,9 @@ func TestQuery_Authors(t *testing.T) {
 		{ID: 2, Name: "Author B"},
 	}
 
-	store.On("ListAuthors", mock.Anything).Return(authors, nil)
+	store.On("ListAuthors", mock.Anything, mock.Anything).Return(authors, nil)
 
-	result, err := resolver.Query().Authors(context.Background())
+	result, err := resolver.Query().Authors(context.Background(), nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -165,9 +165,9 @@ func TestQuery_Series(t *testing.T) {
 		{ID: 2, Name: "Series B"},
 	}
 
-	store.On("ListSeries", mock.Anything).Return(series, nil)
+	store.On("ListSeries", mock.Anything, mock.Anything).Return(series, nil)
 
-	result, err := resolver.Query().Series(context.Background())
+	result, err := resolver.Query().Series(context.Background(), nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -241,9 +241,9 @@ func TestQuery_Tags(t *testing.T) {
 		{ID: 2, Name: "sci-fi"},
 	}
 
-	store.On("ListTags", mock.Anything).Return(tags, nil)
+	store.On("ListTags", mock.Anything, mock.Anything).Return(tags, nil)
 
-	result, err := resolver.Query().Tags(context.Background())
+	result, err := resolver.Query().Tags(context.Background(), nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 2)
@@ -543,4 +543,242 @@ func TestMutation_RemoveTagFromBook(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "Untagged Book", result.Title)
+}
+
+func TestQuery_Books_WithPagination(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	books := []db.Book{
+		{ID: 1, Title: "Book A", Owned: true},
+		{ID: 2, Title: "Book B", Owned: false},
+	}
+
+	store.On("ListBooks", mock.Anything, mock.MatchedBy(func(arg db.ListBooksParams) bool {
+		return arg.Limit.Valid && arg.Limit.Int32 == 10 && arg.Offset.Valid && arg.Offset.Int32 == 5
+	})).Return(books, nil)
+
+	result, err := resolver.Query().Books(context.Background(), nil, nil, nil, intPtr(10), intPtr(5))
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+}
+
+func TestQuery_Authors_WithPagination(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	authors := []db.Author{
+		{ID: 1, Name: "Author A"},
+	}
+
+	store.On("ListAuthors", mock.Anything, mock.MatchedBy(func(arg db.ListAuthorsParams) bool {
+		return arg.Limit.Valid && arg.Limit.Int32 == 5 && arg.Offset.Valid && arg.Offset.Int32 == 0
+	})).Return(authors, nil)
+
+	result, err := resolver.Query().Authors(context.Background(), intPtr(5), intPtr(0))
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+}
+
+func TestQuery_Series_WithPagination(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	series := []db.Series{
+		{ID: 1, Name: "Series A"},
+	}
+
+	store.On("ListSeries", mock.Anything, mock.MatchedBy(func(arg db.ListSeriesParams) bool {
+		return arg.Limit.Valid && arg.Limit.Int32 == 3 && arg.Offset.Valid && arg.Offset.Int32 == 1
+	})).Return(series, nil)
+
+	result, err := resolver.Query().Series(context.Background(), intPtr(3), intPtr(1))
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+}
+
+func TestQuery_Tags_WithPagination(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	tags := []db.Tag{
+		{ID: 1, Name: "fiction"},
+	}
+
+	store.On("ListTags", mock.Anything, mock.MatchedBy(func(arg db.ListTagsParams) bool {
+		return arg.Limit.Valid && arg.Limit.Int32 == 20 && !arg.Offset.Valid
+	})).Return(tags, nil)
+
+	result, err := resolver.Query().Tags(context.Background(), intPtr(20), nil)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+}
+
+func TestEntity_Books_Author(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetAuthor", mock.Anything, int32(1)).Return(db.Author{
+		ID:   1,
+		Name: "Test Author",
+	}, nil)
+
+	book := &Book{ID: 1, Title: "Test Book", AuthorID: 1}
+
+	result, err := resolver.Book().Author(context.Background(), book)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "Test Author", result.Name)
+}
+
+func TestEntity_Books_Tags(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	tags := []db.Tag{
+		{ID: 1, Name: "fiction"},
+		{ID: 2, Name: "sci-fi"},
+	}
+
+	store.On("GetBookTags", mock.Anything, int32(1)).Return(tags, nil)
+
+	book := &Book{ID: 1, Title: "Test Book", AuthorID: 1}
+
+	result, err := resolver.Book().Tags(context.Background(), book)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "fiction", result[0].Name)
+}
+
+func TestEntity_Books_Series(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	seriesBooks := []db.SeriesBook{
+		{SeriesID: 1, BookID: 1, Position: 1},
+	}
+
+	store.On("GetSeriesBooksByBookID", mock.Anything, int32(1)).Return(seriesBooks, nil)
+	store.On("GetSeries", mock.Anything, int32(1)).Return(db.Series{
+		ID:   1,
+		Name: "Test Series",
+	}, nil)
+
+	book := &Book{ID: 1, Title: "Test Book", AuthorID: 1}
+
+	result, err := resolver.Book().Series(context.Background(), book)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, 1, result[0].Position)
+	assert.Equal(t, "Test Series", result[0].Series.Name)
+}
+
+func TestEntity_Author_Books(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	books := []db.Book{
+		{ID: 1, Title: "Book A", AuthorID: 1, Owned: true},
+		{ID: 2, Title: "Book B", AuthorID: 1, Owned: false},
+	}
+
+	store.On("GetBooksByAuthor", mock.Anything, int32(1)).Return(books, nil)
+
+	author := &Author{ID: 1, Name: "Test Author"}
+
+	result, err := resolver.Author().Books(context.Background(), author)
+
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "Book A", result[0].Title)
+}
+
+func TestEntity_Author_Series(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	series := []db.Series{
+		{ID: 1, Name: "Series A"},
+	}
+
+	store.On("GetSeriesByAuthor", mock.Anything, int32(1)).Return(series, nil)
+
+	author := &Author{ID: 1, Name: "Test Author"}
+
+	result, err := resolver.Author().Series(context.Background(), author)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Series A", result[0].Name)
+}
+
+func TestEntity_Series_Books(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	seriesBooks := []db.GetSeriesBooksRow{
+		{SeriesID: 1, BookID: 1, Position: 1},
+	}
+
+	store.On("GetSeriesBooks", mock.Anything, int32(1)).Return(seriesBooks, nil)
+	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{
+		ID:       1,
+		Title:    "Test Book",
+		AuthorID: 1,
+		Owned:    true,
+	}, nil)
+
+	series := &Series{ID: 1, Name: "Test Series"}
+
+	result, err := resolver.Series().Books(context.Background(), series)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Test Book", result[0].Book.Title)
+	assert.Equal(t, 1, result[0].Position)
+}
+
+func TestEntity_SeriesBook_Book(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{
+		ID:       1,
+		Title:    "Test Book",
+		AuthorID: 1,
+		Owned:    true,
+	}, nil)
+
+	sb := &SeriesBook{BookID: 1, SeriesID: 1, Position: 1}
+
+	result, err := resolver.SeriesBook().Book(context.Background(), sb)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "Test Book", result.Title)
+}
+
+func TestEntity_SeriesBook_Series(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetSeries", mock.Anything, int32(1)).Return(db.Series{
+		ID:   1,
+		Name: "Test Series",
+	}, nil)
+
+	sb := &SeriesBook{BookID: 1, SeriesID: 1, Position: 1}
+
+	result, err := resolver.SeriesBook().Series(context.Background(), sb)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "Test Series", result.Name)
 }
