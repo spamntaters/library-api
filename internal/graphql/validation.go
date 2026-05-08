@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -26,10 +27,26 @@ func (e *DuplicateError) Error() string {
 	return fmt.Sprintf("duplicate error: %s '%s' already exists", e.Field, e.Value)
 }
 
+type NotFoundError struct {
+	Resource string
+	ID       any
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("not found: %s with ID %v does not exist", e.Resource, e.ID)
+}
+
 func wrapDBError(err error, field string, value string) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return &DuplicateError{Field: field, Value: value}
+	}
+	return err
+}
+
+func wrapNotFoundError(err error, resource string, id any) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &NotFoundError{Resource: resource, ID: id}
 	}
 	return err
 }
@@ -42,6 +59,11 @@ func IsValidationError(err error) bool {
 func IsDuplicateError(err error) bool {
 	var de *DuplicateError
 	return errors.As(err, &de)
+}
+
+func IsNotFoundError(err error) bool {
+	var ne *NotFoundError
+	return errors.As(err, &ne)
 }
 
 func validateRequiredString(field, value string) error {
