@@ -8,6 +8,11 @@ SELECT id, name, bio, created_at, updated_at
 FROM authors
 WHERE id = $1;
 
+-- name: GetAuthorByName :one
+SELECT id, name, bio, created_at, updated_at
+FROM authors
+WHERE name = $1;
+
 -- name: ListAuthors :many
 SELECT id, name, bio, created_at, updated_at
 FROM authors

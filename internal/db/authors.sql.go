@@ -64,6 +64,25 @@ func (q *Queries) GetAuthor(ctx context.Context, id int32) (Author, error) {
 	return i, err
 }
 
+const getAuthorByName = `-- name: GetAuthorByName :one
+SELECT id, name, bio, created_at, updated_at
+FROM authors
+WHERE name = $1
+`
+
+func (q *Queries) GetAuthorByName(ctx context.Context, name string) (Author, error) {
+	row := q.db.QueryRow(ctx, getAuthorByName, name)
+	var i Author
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Bio,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getBooksByAuthor = `-- name: GetBooksByAuthor :many
 SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
 FROM books
