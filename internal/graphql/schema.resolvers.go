@@ -90,6 +90,10 @@ func (r *bookResolver) Tags(ctx context.Context, obj *Book) ([]*Tag, error) {
 
 // CreateBook is the resolver for the createBook field.
 func (r *mutationResolver) CreateBook(ctx context.Context, input CreateBookInput) (*Book, error) {
+	if err := validateCreateBook(input); err != nil {
+		return nil, err
+	}
+
 	owned := false
 	if input.Owned != nil {
 		owned = *input.Owned
@@ -115,6 +119,10 @@ func (r *mutationResolver) CreateBook(ctx context.Context, input CreateBookInput
 
 // UpdateBook is the resolver for the updateBook field.
 func (r *mutationResolver) UpdateBook(ctx context.Context, id int, input UpdateBookInput) (*Book, error) {
+	if err := validateUpdateBook(id, input); err != nil {
+		return nil, err
+	}
+
 	book, err := r.Store.UpdateBook(ctx, db.UpdateBookParams{
 		ID:            int32(id),
 		Title:         ptrToStr(input.Title),
@@ -133,6 +141,10 @@ func (r *mutationResolver) UpdateBook(ctx context.Context, id int, input UpdateB
 
 // DeleteBook is the resolver for the deleteBook field.
 func (r *mutationResolver) DeleteBook(ctx context.Context, id int) (bool, error) {
+	if err := validatePositiveID("id", id); err != nil {
+		return false, err
+	}
+
 	err := r.Store.DeleteBook(ctx, int32(id))
 	if err != nil {
 		return false, err
@@ -142,6 +154,10 @@ func (r *mutationResolver) DeleteBook(ctx context.Context, id int) (bool, error)
 
 // ToggleOwned is the resolver for the toggleOwned field.
 func (r *mutationResolver) ToggleOwned(ctx context.Context, id int) (*Book, error) {
+	if err := validatePositiveID("id", id); err != nil {
+		return nil, err
+	}
+
 	book, err := r.Store.ToggleOwned(ctx, int32(id))
 	if err != nil {
 		return nil, err
@@ -151,6 +167,10 @@ func (r *mutationResolver) ToggleOwned(ctx context.Context, id int) (*Book, erro
 
 // CreateAuthor is the resolver for the createAuthor field.
 func (r *mutationResolver) CreateAuthor(ctx context.Context, input CreateAuthorInput) (*Author, error) {
+	if err := validateCreateAuthor(input); err != nil {
+		return nil, err
+	}
+
 	author, err := r.Store.CreateAuthor(ctx, db.CreateAuthorParams{
 		Name: input.Name,
 		Bio:  pgtype.Text{String: ptrToStr(input.Bio), Valid: input.Bio != nil},
@@ -163,6 +183,10 @@ func (r *mutationResolver) CreateAuthor(ctx context.Context, input CreateAuthorI
 
 // UpdateAuthor is the resolver for the updateAuthor field.
 func (r *mutationResolver) UpdateAuthor(ctx context.Context, id int, input UpdateAuthorInput) (*Author, error) {
+	if err := validateUpdateAuthor(id, input); err != nil {
+		return nil, err
+	}
+
 	author, err := r.Store.UpdateAuthor(ctx, db.UpdateAuthorParams{
 		ID:   int32(id),
 		Name: ptrToStr(input.Name),
@@ -176,6 +200,10 @@ func (r *mutationResolver) UpdateAuthor(ctx context.Context, id int, input Updat
 
 // DeleteAuthor is the resolver for the deleteAuthor field.
 func (r *mutationResolver) DeleteAuthor(ctx context.Context, id int) (bool, error) {
+	if err := validatePositiveID("id", id); err != nil {
+		return false, err
+	}
+
 	err := r.Store.DeleteAuthor(ctx, int32(id))
 	if err != nil {
 		return false, err
@@ -185,6 +213,10 @@ func (r *mutationResolver) DeleteAuthor(ctx context.Context, id int) (bool, erro
 
 // CreateSeries is the resolver for the createSeries field.
 func (r *mutationResolver) CreateSeries(ctx context.Context, input CreateSeriesInput) (*Series, error) {
+	if err := validateCreateSeries(input); err != nil {
+		return nil, err
+	}
+
 	series, err := r.Store.CreateSeries(ctx, db.CreateSeriesParams{
 		Name:        input.Name,
 		Description: pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
@@ -197,6 +229,10 @@ func (r *mutationResolver) CreateSeries(ctx context.Context, input CreateSeriesI
 
 // UpdateSeries is the resolver for the updateSeries field.
 func (r *mutationResolver) UpdateSeries(ctx context.Context, id int, input UpdateSeriesInput) (*Series, error) {
+	if err := validateUpdateSeries(id, input); err != nil {
+		return nil, err
+	}
+
 	series, err := r.Store.UpdateSeries(ctx, db.UpdateSeriesParams{
 		ID:          int32(id),
 		Name:        ptrToStr(input.Name),
@@ -210,6 +246,10 @@ func (r *mutationResolver) UpdateSeries(ctx context.Context, id int, input Updat
 
 // DeleteSeries is the resolver for the deleteSeries field.
 func (r *mutationResolver) DeleteSeries(ctx context.Context, id int) (bool, error) {
+	if err := validatePositiveID("id", id); err != nil {
+		return false, err
+	}
+
 	err := r.Store.DeleteSeries(ctx, int32(id))
 	if err != nil {
 		return false, err
@@ -219,6 +259,10 @@ func (r *mutationResolver) DeleteSeries(ctx context.Context, id int) (bool, erro
 
 // AddBookToSeries is the resolver for the addBookToSeries field.
 func (r *mutationResolver) AddBookToSeries(ctx context.Context, bookID int, seriesID int, position int) (*SeriesBook, error) {
+	if err := validatePositiveIDs(map[string]int{"bookID": bookID, "seriesID": seriesID}); err != nil {
+		return nil, err
+	}
+
 	sb, err := r.Store.AddBookToSeries(ctx, db.AddBookToSeriesParams{
 		SeriesID: int32(seriesID),
 		BookID:   int32(bookID),
@@ -249,6 +293,10 @@ func (r *mutationResolver) AddBookToSeries(ctx context.Context, bookID int, seri
 
 // RemoveBookFromSeries is the resolver for the removeBookFromSeries field.
 func (r *mutationResolver) RemoveBookFromSeries(ctx context.Context, bookID int, seriesID int) (bool, error) {
+	if err := validatePositiveIDs(map[string]int{"bookID": bookID, "seriesID": seriesID}); err != nil {
+		return false, err
+	}
+
 	err := r.Store.RemoveBookFromSeries(ctx, db.RemoveBookFromSeriesParams{
 		SeriesID: int32(seriesID),
 		BookID:   int32(bookID),
@@ -261,6 +309,10 @@ func (r *mutationResolver) RemoveBookFromSeries(ctx context.Context, bookID int,
 
 // CreateTag is the resolver for the createTag field.
 func (r *mutationResolver) CreateTag(ctx context.Context, name string) (*Tag, error) {
+	if err := validateCreateTag(name); err != nil {
+		return nil, err
+	}
+
 	tag, err := r.Store.CreateTag(ctx, name)
 	if err != nil {
 		return nil, err
@@ -270,6 +322,10 @@ func (r *mutationResolver) CreateTag(ctx context.Context, name string) (*Tag, er
 
 // AddTagToBook is the resolver for the addTagToBook field.
 func (r *mutationResolver) AddTagToBook(ctx context.Context, bookID int, tagID int) (*Book, error) {
+	if err := validatePositiveIDs(map[string]int{"bookID": bookID, "tagID": tagID}); err != nil {
+		return nil, err
+	}
+
 	err := r.Store.AddTagToBook(ctx, db.AddTagToBookParams{
 		BookID: int32(bookID),
 		TagID:  int32(tagID),
@@ -287,6 +343,10 @@ func (r *mutationResolver) AddTagToBook(ctx context.Context, bookID int, tagID i
 
 // RemoveTagFromBook is the resolver for the removeTagFromBook field.
 func (r *mutationResolver) RemoveTagFromBook(ctx context.Context, bookID int, tagID int) (*Book, error) {
+	if err := validatePositiveIDs(map[string]int{"bookID": bookID, "tagID": tagID}); err != nil {
+		return nil, err
+	}
+
 	err := r.Store.RemoveTagFromBook(ctx, db.RemoveTagFromBookParams{
 		BookID: int32(bookID),
 		TagID:  int32(tagID),
