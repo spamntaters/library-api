@@ -1,0 +1,132 @@
+type Author {
+	id: ID!
+	name: String!
+	bio: String
+	books: [Book!]!
+	series: [Series!]!
+}
+
+type Book {
+	id: ID!
+	title: String!
+	isbn: String
+	isbn13: String
+	publishedDate: Time
+	pageCount: Int
+	description: String
+	coverURL: String
+	owned: Boolean!
+	author: Author!
+	series: [SeriesBook!]!
+	tags: [Tag!]!
+}
+
+type Series {
+	id: ID!
+	name: String!
+	description: String
+	books: [SeriesBook!]!
+	missingBooks: [Book!]!
+}
+
+type SeriesBook {
+	book: Book!
+	series: Series!
+	position: Int!
+}
+
+type Tag {
+	id: ID!
+	name: String!
+}
+
+type ExternalBook {
+	title: String
+	authorName: [String]
+	isbn: [String]
+	firstPublishYear: Int
+	coverID: String
+	key: String
+}
+
+type ScanResult {
+	book: Book
+	external: ExternalBook
+	alreadyExists: Boolean
+}
+
+type Query {
+	books(owned: Boolean, authorID: ID, tagID: ID): [Book!]!
+	book(id: ID!): Book
+	authors: [Author!]!
+	author(id: ID!): Author
+	series: [Series!]!
+	seriesByID(id: ID!): Series
+	seriesMissingBooks(seriesID: ID!): [Book!]!
+	similarBooks(bookID: ID!, limit: Int): [ExternalBook!]!
+	similarSeries(seriesID: ID!, limit: Int): [ExternalBook!]!
+	searchOpenLibrary(query: String!, limit: Int): [ExternalBook!]!
+	lookupByISBN(isbn: String!): ExternalBook
+	tags: [Tag!]!
+}
+
+type Mutation {
+	createBook(input: CreateBookInput!): Book!
+	updateBook(id: ID!, input: UpdateBookInput!): Book!
+	deleteBook(id: ID!): Boolean!
+	toggleOwned(id: ID!): Book!
+	createAuthor(input: CreateAuthorInput!): Author!
+	updateAuthor(id: ID!, input: UpdateAuthorInput!): Author!
+	deleteAuthor(id: ID!): Boolean!
+	createSeries(input: CreateSeriesInput!): Series!
+	updateSeries(id: ID!, input: UpdateSeriesInput!): Series!
+	deleteSeries(id: ID!): Boolean!
+	addBookToSeries(bookID: ID!, seriesID: ID!, position: Int!): SeriesBook!
+	removeBookFromSeries(bookID: ID!, seriesID: ID!): Boolean!
+	createTag(name: String!): Tag!
+	addTagToBook(bookID: ID!, tagID: ID!): Book!
+	removeTagFromBook(bookID: ID!, tagID: ID!): Book!
+	scanAndAddBook(isbn: String!): ScanResult!
+}
+
+input CreateBookInput {
+	title: String!
+	authorID: ID!
+	isbn: String
+	isbn13: String
+	publishedDate: Time
+	pageCount: Int
+	description: String
+	owned: Boolean
+}
+
+input UpdateBookInput {
+	title: String
+	isbn: String
+	isbn13: String
+	publishedDate: Time
+	pageCount: Int
+	description: String
+}
+
+input CreateAuthorInput {
+	name: String!
+	bio: String
+}
+
+input UpdateAuthorInput {
+	name: String
+	bio: String
+}
+
+input CreateSeriesInput {
+	name: String!
+	description: String
+}
+
+input UpdateSeriesInput {
+	name: String
+	description: String
+}
+
+scalar Time
