@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,4 +30,25 @@ func NewStore(ctx context.Context, databaseURL string) (*Store, error) {
 
 func (s *Store) Close() {
 	s.Pool.Close()
+}
+
+func (s *Store) WithTx(ctx context.Context, fn func(context.Context, Querier) error) error {
+	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := New(tx)
+
+	if err := fn(ctx, qtx); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+type StoreInterface interface {
+	Querier
+	WithTx(ctx context.Context, fn func(context.Context, Querier) error) error
 }

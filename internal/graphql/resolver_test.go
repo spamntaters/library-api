@@ -171,6 +171,14 @@ func (m *MockStore) GetBookTags(ctx context.Context, bookID int32) ([]db.Tag, er
 	return args.Get(0).([]db.Tag), args.Error(1)
 }
 
+func (m *MockStore) WithTx(ctx context.Context, fn func(context.Context, db.Querier) error) error {
+	args := m.Called(ctx, fn)
+	if args.Error(0) != nil {
+		return args.Error(0)
+	}
+	return fn(ctx, m)
+}
+
 type MockOLClient struct {
 	mock.Mock
 }
