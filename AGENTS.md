@@ -2,6 +2,10 @@
 
 Go GraphQL API for a personal library. PostgreSQL backend with Open Library integration.
 
+## Workflow
+
+- **Always work in a feature branch.** Never commit directly to `main`. Use the naming convention `feat/<short-description>`.
+
 ## Commands
 
 ```
