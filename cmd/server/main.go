@@ -35,6 +35,15 @@ func main() {
 		Resolvers: resolver,
 	}))
 
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if err := store.Pool.Ping(r.Context()); err != nil {
+			http.Error(w, "database unreachable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	http.Handle("/query", playground.Handler("GraphQL Playground", "/graphql"))
 	http.Handle("/graphql", srv)
 
