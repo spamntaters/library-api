@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -314,6 +315,59 @@ func TestMutation_UpdateBook(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "Updated Title", result.Title)
+}
+
+func TestValidation_CreateSeries_DuplicateName(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("CreateSeries", mock.Anything, mock.Anything).Return(db.Series{}, &pgconn.PgError{Code: "23505"})
+
+	input := CreateSeriesInput{
+		Name: "Existing Series",
+	}
+
+	result, err := resolver.Mutation().CreateSeries(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsDuplicateError(err))
+	assert.Contains(t, err.Error(), "name")
+	assert.Contains(t, err.Error(), "Existing Series")
+}
+
+func TestValidation_CreateTag_DuplicateName(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("CreateTag", mock.Anything, "existing-tag").Return(db.Tag{}, &pgconn.PgError{Code: "23505"})
+
+	result, err := resolver.Mutation().CreateTag(context.Background(), "existing-tag")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsDuplicateError(err))
+	assert.Contains(t, err.Error(), "name")
+	assert.Contains(t, err.Error(), "existing-tag")
+}
+
+func TestValidation_UpdateSeries_DuplicateName(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	newName := "Duplicate Series"
+	store.On("UpdateSeries", mock.Anything, mock.Anything).Return(db.Series{}, &pgconn.PgError{Code: "23505"})
+
+	input := UpdateSeriesInput{
+		Name: &newName,
+	}
+
+	result, err := resolver.Mutation().UpdateSeries(context.Background(), 1, input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsDuplicateError(err))
+	assert.Contains(t, err.Error(), "Duplicate Series")
 }
 
 func TestValidation_CreateBook_EmptyTitle(t *testing.T) {
