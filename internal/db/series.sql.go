@@ -71,10 +71,18 @@ FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1 AND b.owned = false
 ORDER BY sb.position
+LIMIT $3
+OFFSET $2
 `
 
-func (q *Queries) GetMissingBooks(ctx context.Context, seriesID int32) ([]Book, error) {
-	rows, err := q.db.Query(ctx, getMissingBooks, seriesID)
+type GetMissingBooksParams struct {
+	SeriesID int32
+	Offset   pgtype.Int4
+	Limit    pgtype.Int4
+}
+
+func (q *Queries) GetMissingBooks(ctx context.Context, arg GetMissingBooksParams) ([]Book, error) {
+	rows, err := q.db.Query(ctx, getMissingBooks, arg.SeriesID, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +142,15 @@ FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1
 ORDER BY sb.position
+LIMIT $3
+OFFSET $2
 `
+
+type GetSeriesBooksParams struct {
+	SeriesID int32
+	Offset   pgtype.Int4
+	Limit    pgtype.Int4
+}
 
 type GetSeriesBooksRow struct {
 	SeriesID      int32
@@ -154,8 +170,8 @@ type GetSeriesBooksRow struct {
 	BookUpdatedAt pgtype.Timestamptz
 }
 
-func (q *Queries) GetSeriesBooks(ctx context.Context, seriesID int32) ([]GetSeriesBooksRow, error) {
-	rows, err := q.db.Query(ctx, getSeriesBooks, seriesID)
+func (q *Queries) GetSeriesBooks(ctx context.Context, arg GetSeriesBooksParams) ([]GetSeriesBooksRow, error) {
+	rows, err := q.db.Query(ctx, getSeriesBooks, arg.SeriesID, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

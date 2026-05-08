@@ -28,8 +28,8 @@ type Series {
 	id: ID!
 	name: String!
 	description: String
-	books: [SeriesBook!]! @goField(forceResolver: true)
-	missingBooks: [Book!]! @goField(forceResolver: true)
+	books(limit: Int, offset: Int): [SeriesBook!]! @goField(forceResolver: true)
+	missingBooks(limit: Int, offset: Int): [Book!]! @goField(forceResolver: true)
 }
 
 type SeriesBook {
@@ -67,7 +67,7 @@ type Query {
 	author(id: ID!): Author
 	series(limit: Int, offset: Int): [Series!]!
 	seriesByID(id: ID!): Series
-	seriesMissingBooks(seriesID: ID!): [Book!]!
+	seriesMissingBooks(seriesID: ID!, limit: Int, offset: Int): [Book!]!
 	similarBooks(bookID: ID!, limit: Int): [ExternalBook!]!
 	similarSeries(seriesID: ID!, limit: Int): [ExternalBook!]!
 	searchOpenLibrary(query: String!, limit: Int): [ExternalBook!]!

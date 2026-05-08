@@ -64,7 +64,7 @@ func (r *bookResolver) Series(ctx context.Context, obj *Book) ([]*SeriesBook, er
 		if err != nil {
 			return nil, err
 		}
-	seriesBooks[i] = &SeriesBook{
+		seriesBooks[i] = &SeriesBook{
 			BookID:   int(obj.ID),
 			SeriesID: int(sb.SeriesID),
 			Series:   dbToGraphQLSeries(series),
@@ -539,8 +539,12 @@ func (r *queryResolver) SeriesByID(ctx context.Context, id int) (*Series, error)
 }
 
 // SeriesMissingBooks is the resolver for the seriesMissingBooks field.
-func (r *queryResolver) SeriesMissingBooks(ctx context.Context, seriesID int) ([]*Book, error) {
-	dbBooks, err := r.Store.GetMissingBooks(ctx, int32(seriesID))
+func (r *queryResolver) SeriesMissingBooks(ctx context.Context, seriesID int, limit *int, offset *int) ([]*Book, error) {
+	dbBooks, err := r.Store.GetMissingBooks(ctx, db.GetMissingBooksParams{
+		SeriesID: int32(seriesID),
+		Limit:    pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset:   pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -649,8 +653,12 @@ func (r *queryResolver) Tags(ctx context.Context, limit *int, offset *int) ([]*T
 }
 
 // Books is the resolver for the books field.
-func (r *seriesResolver) Books(ctx context.Context, obj *Series) ([]*SeriesBook, error) {
-	dbSeriesBooks, err := r.Store.GetSeriesBooks(ctx, int32(obj.ID))
+func (r *seriesResolver) Books(ctx context.Context, obj *Series, limit *int, offset *int) ([]*SeriesBook, error) {
+	dbSeriesBooks, err := r.Store.GetSeriesBooks(ctx, db.GetSeriesBooksParams{
+		SeriesID: int32(obj.ID),
+		Limit:    pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset:   pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -673,8 +681,12 @@ func (r *seriesResolver) Books(ctx context.Context, obj *Series) ([]*SeriesBook,
 }
 
 // MissingBooks is the resolver for the missingBooks field.
-func (r *seriesResolver) MissingBooks(ctx context.Context, obj *Series) ([]*Book, error) {
-	dbBooks, err := r.Store.GetMissingBooks(ctx, int32(obj.ID))
+func (r *seriesResolver) MissingBooks(ctx context.Context, obj *Series, limit *int, offset *int) ([]*Book, error) {
+	dbBooks, err := r.Store.GetMissingBooks(ctx, db.GetMissingBooksParams{
+		SeriesID: int32(obj.ID),
+		Limit:    pgtype.Int4{Int32: int32(ptrToInt(limit)), Valid: limit != nil},
+		Offset:   pgtype.Int4{Int32: int32(ptrToInt(offset)), Valid: offset != nil},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -739,14 +751,12 @@ func dbToGraphQLSeries(s db.Series) *Series {
 	}
 	return result
 }
-
 func dbToGraphQLTag(t db.Tag) *Tag {
 	return &Tag{
 		ID:   int(t.ID),
 		Name: t.Name,
 	}
 }
-
 func dbToGraphQLAuthor(a db.Author) *Author {
 	author := &Author{
 		ID:   int(a.ID),
@@ -757,7 +767,6 @@ func dbToGraphQLAuthor(a db.Author) *Author {
 	}
 	return author
 }
-
 func dbToGraphQLBook(b db.Book) *Book {
 	book := &Book{
 		ID:       int(b.ID),
@@ -791,7 +800,6 @@ func dbToGraphQLBook(b db.Book) *Book {
 	}
 	return book
 }
-
 func olToExternalBook(data *openlibrary.BookData) *ExternalBook {
 	result := &ExternalBook{}
 	if data.Title != "" {
@@ -819,7 +827,6 @@ func olToExternalBook(data *openlibrary.BookData) *ExternalBook {
 	}
 	return result
 }
-
 func docToExternalBook(doc openlibrary.Doc) *ExternalBook {
 	result := &ExternalBook{
 		Title: &doc.Title,
@@ -849,35 +856,30 @@ func docToExternalBook(doc openlibrary.Doc) *ExternalBook {
 	}
 	return result
 }
-
 func ptrToStr(s *string) string {
 	if s == nil {
 		return ""
 	}
 	return *s
 }
-
 func ptrToBool(b *bool) bool {
 	if b == nil {
 		return false
 	}
 	return *b
 }
-
 func ptrToInt(i *int) int {
 	if i == nil {
 		return 0
 	}
 	return *i
 }
-
 func timeToPgDate(t *time.Time) pgtype.Date {
 	if t == nil {
 		return pgtype.Date{Valid: false}
 	}
 	return pgtype.Date{Time: *t, Valid: true}
 }
-
 func intToPgInt4(i *int) pgtype.Int4 {
 	if i == nil {
 		return pgtype.Int4{Valid: false}

@@ -31,8 +31,8 @@ type Querier interface {
 	DeleteSeries(ctx context.Context, id int32) error
 	AddBookToSeries(ctx context.Context, arg AddBookToSeriesParams) (SeriesBook, error)
 	RemoveBookFromSeries(ctx context.Context, arg RemoveBookFromSeriesParams) error
-	GetSeriesBooks(ctx context.Context, seriesID int32) ([]GetSeriesBooksRow, error)
-	GetMissingBooks(ctx context.Context, seriesID int32) ([]Book, error)
+	GetSeriesBooks(ctx context.Context, arg GetSeriesBooksParams) ([]GetSeriesBooksRow, error)
+	GetMissingBooks(ctx context.Context, arg GetMissingBooksParams) ([]Book, error)
 	GetSeriesBooksByBookID(ctx context.Context, bookID int32) ([]SeriesBook, error)
 
 	CreateTag(ctx context.Context, name string) (Tag, error)

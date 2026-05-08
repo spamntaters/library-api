@@ -126,13 +126,13 @@ func (m *MockStore) RemoveBookFromSeries(ctx context.Context, arg db.RemoveBookF
 	return args.Error(0)
 }
 
-func (m *MockStore) GetSeriesBooks(ctx context.Context, seriesID int32) ([]db.GetSeriesBooksRow, error) {
-	args := m.Called(ctx, seriesID)
+func (m *MockStore) GetSeriesBooks(ctx context.Context, arg db.GetSeriesBooksParams) ([]db.GetSeriesBooksRow, error) {
+	args := m.Called(ctx, arg)
 	return args.Get(0).([]db.GetSeriesBooksRow), args.Error(1)
 }
 
-func (m *MockStore) GetMissingBooks(ctx context.Context, seriesID int32) ([]db.Book, error) {
-	args := m.Called(ctx, seriesID)
+func (m *MockStore) GetMissingBooks(ctx context.Context, arg db.GetMissingBooksParams) ([]db.Book, error) {
+	args := m.Called(ctx, arg)
 	return args.Get(0).([]db.Book), args.Error(1)
 }
 
