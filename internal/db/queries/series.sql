@@ -44,7 +44,9 @@ SELECT sb.series_id, sb.book_id, sb.position,
 FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1
-ORDER BY sb.position;
+ORDER BY sb.position
+LIMIT sqlc.narg('limit')
+OFFSET sqlc.narg('offset');
 
 -- name: GetMissingBooks :many
 SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date,
@@ -52,7 +54,9 @@ SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date,
 FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1 AND b.owned = false
-ORDER BY sb.position;
+ORDER BY sb.position
+LIMIT sqlc.narg('limit')
+OFFSET sqlc.narg('offset');
 
 -- name: GetSeriesBooksByBookID :many
 SELECT series_id, book_id, position

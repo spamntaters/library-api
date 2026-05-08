@@ -101,7 +101,7 @@ type ComplexityRoot struct {
 		SearchOpenLibrary  func(childComplexity int, query string, limit *int) int
 		Series             func(childComplexity int, limit *int, offset *int) int
 		SeriesByID         func(childComplexity int, id int) int
-		SeriesMissingBooks func(childComplexity int, seriesID int) int
+		SeriesMissingBooks func(childComplexity int, seriesID int, limit *int, offset *int) int
 		SimilarBooks       func(childComplexity int, bookID int, limit *int) int
 		SimilarSeries      func(childComplexity int, seriesID int, limit *int) int
 		Tags               func(childComplexity int, limit *int, offset *int) int
@@ -114,10 +114,10 @@ type ComplexityRoot struct {
 	}
 
 	Series struct {
-		Books        func(childComplexity int) int
+		Books        func(childComplexity int, limit *int, offset *int) int
 		Description  func(childComplexity int) int
 		ID           func(childComplexity int) int
-		MissingBooks func(childComplexity int) int
+		MissingBooks func(childComplexity int, limit *int, offset *int) int
 		Name         func(childComplexity int) int
 	}
 
@@ -169,7 +169,7 @@ type QueryResolver interface {
 	Author(ctx context.Context, id int) (*Author, error)
 	Series(ctx context.Context, limit *int, offset *int) ([]*Series, error)
 	SeriesByID(ctx context.Context, id int) (*Series, error)
-	SeriesMissingBooks(ctx context.Context, seriesID int) ([]*Book, error)
+	SeriesMissingBooks(ctx context.Context, seriesID int, limit *int, offset *int) ([]*Book, error)
 	SimilarBooks(ctx context.Context, bookID int, limit *int) ([]*ExternalBook, error)
 	SimilarSeries(ctx context.Context, seriesID int, limit *int) ([]*ExternalBook, error)
 	SearchOpenLibrary(ctx context.Context, query string, limit *int) ([]*ExternalBook, error)
@@ -177,8 +177,8 @@ type QueryResolver interface {
 	Tags(ctx context.Context, limit *int, offset *int) ([]*Tag, error)
 }
 type SeriesResolver interface {
-	Books(ctx context.Context, obj *Series) ([]*SeriesBook, error)
-	MissingBooks(ctx context.Context, obj *Series) ([]*Book, error)
+	Books(ctx context.Context, obj *Series, limit *int, offset *int) ([]*SeriesBook, error)
+	MissingBooks(ctx context.Context, obj *Series, limit *int, offset *int) ([]*Book, error)
 }
 type SeriesBookResolver interface {
 	Book(ctx context.Context, obj *SeriesBook) (*Book, error)
@@ -622,7 +622,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.SeriesMissingBooks(childComplexity, args["seriesID"].(int)), true
+		return e.ComplexityRoot.Query.SeriesMissingBooks(childComplexity, args["seriesID"].(int), args["limit"].(*int), args["offset"].(*int)), true
 	case "Query.similarBooks":
 		if e.ComplexityRoot.Query.SimilarBooks == nil {
 			break
@@ -681,7 +681,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.ComplexityRoot.Series.Books(childComplexity), true
+		args, err := ec.field_Series_books_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Series.Books(childComplexity, args["limit"].(*int), args["offset"].(*int)), true
 	case "Series.description":
 		if e.ComplexityRoot.Series.Description == nil {
 			break
@@ -699,7 +704,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.ComplexityRoot.Series.MissingBooks(childComplexity), true
+		args, err := ec.field_Series_missingBooks_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Series.MissingBooks(childComplexity, args["limit"].(*int), args["offset"].(*int)), true
 	case "Series.name":
 		if e.ComplexityRoot.Series.Name == nil {
 			break
@@ -870,8 +880,8 @@ type Series {
 	id: ID!
 	name: String!
 	description: String
-	books: [SeriesBook!]! @goField(forceResolver: true)
-	missingBooks: [Book!]! @goField(forceResolver: true)
+	books(limit: Int, offset: Int): [SeriesBook!]! @goField(forceResolver: true)
+	missingBooks(limit: Int, offset: Int): [Book!]! @goField(forceResolver: true)
 }
 
 type SeriesBook {
@@ -909,7 +919,7 @@ type Query {
 	author(id: ID!): Author
 	series(limit: Int, offset: Int): [Series!]!
 	seriesByID(id: ID!): Series
-	seriesMissingBooks(seriesID: ID!): [Book!]!
+	seriesMissingBooks(seriesID: ID!, limit: Int, offset: Int): [Book!]!
 	similarBooks(bookID: ID!, limit: Int): [ExternalBook!]!
 	similarSeries(seriesID: ID!, limit: Int): [ExternalBook!]!
 	searchOpenLibrary(query: String!, limit: Int): [ExternalBook!]!
@@ -1680,6 +1690,22 @@ func (ec *executionContext) field_Query_seriesMissingBooks_args(ctx context.Cont
 		return nil, err
 	}
 	args["seriesID"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg2
 	return args, nil
 }
 
@@ -1750,6 +1776,50 @@ func (ec *executionContext) field_Query_similarSeries_args(ctx context.Context, 
 }
 
 func (ec *executionContext) field_Query_tags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Series_books_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Series_missingBooks_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
@@ -3410,7 +3480,7 @@ func (ec *executionContext) _Query_seriesMissingBooks(ctx context.Context, field
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().SeriesMissingBooks(ctx, fc.Args["seriesID"].(int))
+			return ec.Resolvers.Query().SeriesMissingBooks(ctx, fc.Args["seriesID"].(int), fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Book) graphql.Marshaler {
@@ -3905,7 +3975,8 @@ func (ec *executionContext) _Series_books(ctx context.Context, field graphql.Col
 			return ec.fieldContext_Series_books(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Series().Books(ctx, obj)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Series().Books(ctx, obj, fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*SeriesBook) graphql.Marshaler {
@@ -3915,7 +3986,7 @@ func (ec *executionContext) _Series_books(ctx context.Context, field graphql.Col
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Series_books(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Series_books(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Series",
 		Field:      field,
@@ -3924,6 +3995,17 @@ func (ec *executionContext) fieldContext_Series_books(_ context.Context, field g
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_SeriesBook(ctx, field)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Series_books_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -3937,7 +4019,8 @@ func (ec *executionContext) _Series_missingBooks(ctx context.Context, field grap
 			return ec.fieldContext_Series_missingBooks(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Series().MissingBooks(ctx, obj)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Series().MissingBooks(ctx, obj, fc.Args["limit"].(*int), fc.Args["offset"].(*int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*Book) graphql.Marshaler {
@@ -3947,7 +4030,7 @@ func (ec *executionContext) _Series_missingBooks(ctx context.Context, field grap
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Series_missingBooks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Series_missingBooks(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Series",
 		Field:      field,
@@ -3956,6 +4039,17 @@ func (ec *executionContext) fieldContext_Series_missingBooks(_ context.Context, 
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Book(ctx, field)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Series_missingBooks_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }

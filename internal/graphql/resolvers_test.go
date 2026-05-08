@@ -233,7 +233,7 @@ func TestQuery_SeriesMissingBooks(t *testing.T) {
 		{ID: 2, Title: "Missing Book 2", Owned: false},
 	}
 
-	store.On("GetMissingBooks", mock.Anything, int32(1)).Return(missing, nil)
+	store.On("GetMissingBooks", mock.Anything, db.GetMissingBooksParams{SeriesID: 1}).Return(missing, nil)
 
 	result, err := resolver.Query().SeriesMissingBooks(context.Background(), 1)
 
@@ -246,7 +246,7 @@ func TestQuery_SeriesMissingBooks_Empty(t *testing.T) {
 	store := &MockStore{}
 	resolver := testResolver(store, &MockOLClient{})
 
-	store.On("GetMissingBooks", mock.Anything, int32(1)).Return([]db.Book{}, nil)
+	store.On("GetMissingBooks", mock.Anything, db.GetMissingBooksParams{SeriesID: 1}).Return([]db.Book{}, nil)
 
 	result, err := resolver.Query().SeriesMissingBooks(context.Background(), 1)
 
@@ -1346,7 +1346,7 @@ func TestEntity_Series_Books(t *testing.T) {
 		{SeriesID: 1, BookID: 1, Position: 1},
 	}
 
-	store.On("GetSeriesBooks", mock.Anything, int32(1)).Return(seriesBooks, nil)
+	store.On("GetSeriesBooks", mock.Anything, db.GetSeriesBooksParams{SeriesID: 1}).Return(seriesBooks, nil)
 	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{
 		ID:       1,
 		Title:    "Test Book",
@@ -1356,12 +1356,59 @@ func TestEntity_Series_Books(t *testing.T) {
 
 	series := &Series{ID: 1, Name: "Test Series"}
 
-	result, err := resolver.Series().Books(context.Background(), series)
+	result, err := resolver.Series().Books(context.Background(), series, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "Test Book", result[0].Book.Title)
 	assert.Equal(t, 1, result[0].Position)
+}
+
+func TestEntity_Series_Books_WithPagination(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	seriesBooks := []db.GetSeriesBooksRow{
+		{SeriesID: 1, BookID: 1, Position: 1},
+	}
+
+	store.On("GetSeriesBooks", mock.Anything, mock.MatchedBy(func(arg db.GetSeriesBooksParams) bool {
+		return arg.SeriesID == 1 && arg.Limit.Valid && arg.Limit.Int32 == 5 && arg.Offset.Valid && arg.Offset.Int32 == 2
+	})).Return(seriesBooks, nil)
+	store.On("GetBook", mock.Anything, int32(1)).Return(db.Book{
+		ID:       1,
+		Title:    "Test Book",
+		AuthorID: 1,
+		Owned:    true,
+	}, nil)
+
+	series := &Series{ID: 1, Name: "Test Series"}
+
+	result, err := resolver.Series().Books(context.Background(), series, intPtr(5), intPtr(2))
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+}
+
+func TestEntity_Series_MissingBooks_WithPagination(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	missing := []db.Book{
+		{ID: 1, Title: "Missing Book", Owned: false},
+	}
+
+	store.On("GetMissingBooks", mock.Anything, mock.MatchedBy(func(arg db.GetMissingBooksParams) bool {
+		return arg.SeriesID == 1 && arg.Limit.Valid && arg.Limit.Int32 == 10 && !arg.Offset.Valid
+	})).Return(missing, nil)
+
+	series := &Series{ID: 1, Name: "Test Series"}
+
+	result, err := resolver.Series().MissingBooks(context.Background(), series, intPtr(10), nil)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Missing Book", result[0].Title)
 }
 
 func TestEntity_SeriesBook_Book(t *testing.T) {
