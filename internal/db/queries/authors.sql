@@ -33,7 +33,7 @@ DELETE FROM authors
 WHERE id = $1;
 
 -- name: GetBooksByAuthor :many
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 FROM books
 WHERE author_id = $1
 ORDER BY title;

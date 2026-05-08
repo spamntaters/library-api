@@ -12,9 +12,9 @@ import (
 )
 
 const createBook = `-- name: CreateBook :one
-INSERT INTO books (title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+INSERT INTO books (title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, read)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 `
 
 type CreateBookParams struct {
@@ -27,6 +27,7 @@ type CreateBookParams struct {
 	Description   pgtype.Text
 	CoverUrl      pgtype.Text
 	Owned         bool
+	Read          bool
 }
 
 func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, error) {
@@ -40,6 +41,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, e
 		arg.Description,
 		arg.CoverUrl,
 		arg.Owned,
+		arg.Read,
 	)
 	var i Book
 	err := row.Scan(
@@ -55,6 +57,7 @@ func (q *Queries) CreateBook(ctx context.Context, arg CreateBookParams) (Book, e
 		&i.Owned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Read,
 	)
 	return i, err
 }
@@ -70,7 +73,7 @@ func (q *Queries) DeleteBook(ctx context.Context, id int32) error {
 }
 
 const getBook = `-- name: GetBook :one
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 FROM books
 WHERE id = $1
 `
@@ -91,12 +94,13 @@ func (q *Queries) GetBook(ctx context.Context, id int32) (Book, error) {
 		&i.Owned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Read,
 	)
 	return i, err
 }
 
 const getBookByISBN = `-- name: GetBookByISBN :one
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 FROM books
 WHERE isbn = $1 OR isbn13 = $1
 `
@@ -117,12 +121,13 @@ func (q *Queries) GetBookByISBN(ctx context.Context, isbn pgtype.Text) (Book, er
 		&i.Owned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Read,
 	)
 	return i, err
 }
 
 const listBooks = `-- name: ListBooks :many
-SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date, b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at
+SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date, b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at, b.read
 FROM books b
 WHERE ($1::boolean IS NULL OR b.owned = $1)
   AND ($2::int IS NULL OR b.author_id = $2)
@@ -170,6 +175,7 @@ func (q *Queries) ListBooks(ctx context.Context, arg ListBooksParams) ([]Book, e
 			&i.Owned,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Read,
 		); err != nil {
 			return nil, err
 		}
@@ -186,7 +192,7 @@ UPDATE books
 SET owned = NOT owned,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 `
 
 func (q *Queries) ToggleOwned(ctx context.Context, id int32) (Book, error) {
@@ -205,6 +211,36 @@ func (q *Queries) ToggleOwned(ctx context.Context, id int32) (Book, error) {
 		&i.Owned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Read,
+	)
+	return i, err
+}
+
+const toggleRead = `-- name: ToggleRead :one
+UPDATE books
+SET read = NOT read,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
+`
+
+func (q *Queries) ToggleRead(ctx context.Context, id int32) (Book, error) {
+	row := q.db.QueryRow(ctx, toggleRead, id)
+	var i Book
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.AuthorID,
+		&i.Isbn,
+		&i.Isbn13,
+		&i.PublishedDate,
+		&i.PageCount,
+		&i.Description,
+		&i.CoverUrl,
+		&i.Owned,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Read,
 	)
 	return i, err
 }
@@ -219,7 +255,7 @@ SET title = COALESCE($2, title),
     description = COALESCE($7, description),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 `
 
 type UpdateBookParams struct {
@@ -256,6 +292,7 @@ func (q *Queries) UpdateBook(ctx context.Context, arg UpdateBookParams) (Book, e
 		&i.Owned,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Read,
 	)
 	return i, err
 }

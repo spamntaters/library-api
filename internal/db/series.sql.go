@@ -66,7 +66,7 @@ func (q *Queries) DeleteSeries(ctx context.Context, id int32) error {
 
 const getMissingBooks = `-- name: GetMissingBooks :many
 SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date,
-       b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at
+       b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at, b.read
 FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1 AND b.owned = false
@@ -103,6 +103,7 @@ func (q *Queries) GetMissingBooks(ctx context.Context, arg GetMissingBooksParams
 			&i.Owned,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Read,
 		); err != nil {
 			return nil, err
 		}
@@ -137,7 +138,7 @@ const getSeriesBooks = `-- name: GetSeriesBooks :many
 SELECT sb.series_id, sb.book_id, sb.position,
        b.id as book_id, b.title, b.author_id, b.isbn, b.isbn13,
        b.published_date, b.page_count, b.description, b.cover_url, b.owned,
-       b.created_at as book_created_at, b.updated_at as book_updated_at
+       b.created_at as book_created_at, b.updated_at as book_updated_at, b.read
 FROM series_books sb
 JOIN books b ON b.id = sb.book_id
 WHERE sb.series_id = $1
@@ -168,6 +169,7 @@ type GetSeriesBooksRow struct {
 	Owned         bool
 	BookCreatedAt pgtype.Timestamptz
 	BookUpdatedAt pgtype.Timestamptz
+	Read          bool
 }
 
 func (q *Queries) GetSeriesBooks(ctx context.Context, arg GetSeriesBooksParams) ([]GetSeriesBooksRow, error) {
@@ -195,6 +197,7 @@ func (q *Queries) GetSeriesBooks(ctx context.Context, arg GetSeriesBooksParams) 
 			&i.Owned,
 			&i.BookCreatedAt,
 			&i.BookUpdatedAt,
+			&i.Read,
 		); err != nil {
 			return nil, err
 		}

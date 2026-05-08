@@ -29,6 +29,7 @@ type Book struct {
 	Owned         bool
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+	Read          bool
 }
 
 type BookTag struct {

@@ -18,6 +18,7 @@ type Book {
 	description: String
 	coverURL: String
 	owned: Boolean!
+	read: Boolean!
 	authorID: ID!
 	author: Author! @goField(forceResolver: true)
 	series: [SeriesBook!]! @goField(forceResolver: true)
@@ -80,6 +81,7 @@ type Mutation {
 	updateBook(id: ID!, input: UpdateBookInput!): Book!
 	deleteBook(id: ID!): Boolean!
 	toggleOwned(id: ID!): Book!
+	toggleRead(id: ID!): Book!
 	createAuthor(input: CreateAuthorInput!): Author!
 	updateAuthor(id: ID!, input: UpdateAuthorInput!): Author!
 	deleteAuthor(id: ID!): Boolean!

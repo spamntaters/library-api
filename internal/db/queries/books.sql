@@ -1,15 +1,15 @@
 -- name: CreateBook :one
-INSERT INTO books (title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at;
+INSERT INTO books (title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, read)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read;
 
 -- name: GetBook :one
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 FROM books
 WHERE id = $1;
 
 -- name: ListBooks :many
-SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date, b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at
+SELECT b.id, b.title, b.author_id, b.isbn, b.isbn13, b.published_date, b.page_count, b.description, b.cover_url, b.owned, b.created_at, b.updated_at, b.read
 FROM books b
 WHERE (sqlc.narg(owned)::boolean IS NULL OR b.owned = sqlc.narg(owned))
   AND (sqlc.narg(author_id)::int IS NULL OR b.author_id = sqlc.narg(author_id))
@@ -30,7 +30,7 @@ SET title = COALESCE($2, title),
     description = COALESCE($7, description),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at;
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read;
 
 -- name: DeleteBook :exec
 DELETE FROM books
@@ -41,9 +41,16 @@ UPDATE books
 SET owned = NOT owned,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at;
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read;
+
+-- name: ToggleRead :one
+UPDATE books
+SET read = NOT read,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read;
 
 -- name: GetBookByISBN :one
-SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at
+SELECT id, title, author_id, isbn, isbn13, published_date, page_count, description, cover_url, owned, created_at, updated_at, read
 FROM books
 WHERE isbn = $1 OR isbn13 = $1;
