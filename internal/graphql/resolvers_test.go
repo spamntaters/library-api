@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -314,6 +315,102 @@ func TestMutation_UpdateBook(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "Updated Title", result.Title)
+}
+
+func TestQuery_Book_NotFoundError(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetBook", mock.Anything, int32(999)).Return(db.Book{}, pgx.ErrNoRows)
+
+	result, err := resolver.Query().Book(context.Background(), 999)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsNotFoundError(err))
+	assert.Contains(t, err.Error(), "book")
+	assert.Contains(t, err.Error(), "999")
+}
+
+func TestQuery_Author_NotFoundError(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetAuthor", mock.Anything, int32(999)).Return(db.Author{}, pgx.ErrNoRows)
+
+	result, err := resolver.Query().Author(context.Background(), 999)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsNotFoundError(err))
+	assert.Contains(t, err.Error(), "author")
+	assert.Contains(t, err.Error(), "999")
+}
+
+func TestQuery_SeriesByID_NotFoundError(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetSeries", mock.Anything, int32(999)).Return(db.Series{}, pgx.ErrNoRows)
+
+	result, err := resolver.Query().SeriesByID(context.Background(), 999)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsNotFoundError(err))
+	assert.Contains(t, err.Error(), "series")
+	assert.Contains(t, err.Error(), "999")
+}
+
+func TestEntity_Book_Author_NotFoundError(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetAuthor", mock.Anything, int32(5)).Return(db.Author{}, pgx.ErrNoRows)
+
+	book := &Book{ID: 1, Title: "Test Book", AuthorID: 5}
+
+	result, err := resolver.Book().Author(context.Background(), book)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsNotFoundError(err))
+	assert.Contains(t, err.Error(), "author")
+	assert.Contains(t, err.Error(), "5")
+}
+
+func TestEntity_SeriesBook_Book_NotFoundError(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetBook", mock.Anything, int32(999)).Return(db.Book{}, pgx.ErrNoRows)
+
+	sb := &SeriesBook{BookID: 999, SeriesID: 1, Position: 1}
+
+	result, err := resolver.SeriesBook().Book(context.Background(), sb)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsNotFoundError(err))
+	assert.Contains(t, err.Error(), "book")
+	assert.Contains(t, err.Error(), "999")
+}
+
+func TestEntity_SeriesBook_Series_NotFoundError(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	store.On("GetSeries", mock.Anything, int32(999)).Return(db.Series{}, pgx.ErrNoRows)
+
+	sb := &SeriesBook{BookID: 1, SeriesID: 999, Position: 1}
+
+	result, err := resolver.SeriesBook().Series(context.Background(), sb)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsNotFoundError(err))
+	assert.Contains(t, err.Error(), "series")
+	assert.Contains(t, err.Error(), "999")
 }
 
 func TestValidation_CreateBook_EmptyTitle(t *testing.T) {
