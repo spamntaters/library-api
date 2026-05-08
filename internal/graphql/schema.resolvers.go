@@ -222,7 +222,7 @@ func (r *mutationResolver) CreateSeries(ctx context.Context, input CreateSeriesI
 		Description: pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
 	})
 	if err != nil {
-		return nil, err
+		return nil, wrapDBError(err, "name", input.Name)
 	}
 	return dbToGraphQLSeries(series), nil
 }
@@ -239,6 +239,9 @@ func (r *mutationResolver) UpdateSeries(ctx context.Context, id int, input Updat
 		Description: pgtype.Text{String: ptrToStr(input.Description), Valid: input.Description != nil},
 	})
 	if err != nil {
+		if input.Name != nil {
+			return nil, wrapDBError(err, "name", *input.Name)
+		}
 		return nil, err
 	}
 	return dbToGraphQLSeries(series), nil
@@ -315,7 +318,7 @@ func (r *mutationResolver) CreateTag(ctx context.Context, name string) (*Tag, er
 
 	tag, err := r.Store.CreateTag(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, wrapDBError(err, "name", name)
 	}
 	return dbToGraphQLTag(tag), nil
 }
