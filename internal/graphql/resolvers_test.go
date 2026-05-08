@@ -316,6 +316,151 @@ func TestMutation_UpdateBook(t *testing.T) {
 	assert.Equal(t, "Updated Title", result.Title)
 }
 
+func TestValidation_CreateBook_EmptyTitle(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	input := CreateBookInput{
+		Title:    "",
+		AuthorID: 1,
+	}
+
+	result, err := resolver.Mutation().CreateBook(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "title")
+}
+
+func TestValidation_CreateBook_ZeroAuthorID(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	input := CreateBookInput{
+		Title:    "Valid Title",
+		AuthorID: 0,
+	}
+
+	result, err := resolver.Mutation().CreateBook(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "authorID")
+}
+
+func TestValidation_CreateAuthor_EmptyName(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	input := CreateAuthorInput{
+		Name: "",
+	}
+
+	result, err := resolver.Mutation().CreateAuthor(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "name")
+}
+
+func TestValidation_CreateSeries_EmptyName(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	input := CreateSeriesInput{
+		Name: "   ",
+	}
+
+	result, err := resolver.Mutation().CreateSeries(context.Background(), input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "name")
+}
+
+func TestValidation_CreateTag_EmptyName(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	result, err := resolver.Mutation().CreateTag(context.Background(), "")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "name")
+}
+
+func TestValidation_DeleteBook_ZeroID(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	result, err := resolver.Mutation().DeleteBook(context.Background(), 0)
+
+	require.Error(t, err)
+	assert.False(t, result)
+	assert.True(t, IsValidationError(err))
+}
+
+func TestValidation_UpdateBook_NegativeID(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	input := UpdateBookInput{
+		Title: strPtr("Updated"),
+	}
+
+	result, err := resolver.Mutation().UpdateBook(context.Background(), -1, input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+}
+
+func TestValidation_AddBookToSeries_ZeroBookID(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	result, err := resolver.Mutation().AddBookToSeries(context.Background(), 0, 1, 1)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "bookID")
+}
+
+func TestValidation_AddTagToBook_ZeroTagID(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	result, err := resolver.Mutation().AddTagToBook(context.Background(), 1, 0)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "tagID")
+}
+
+func TestValidation_UpdateBook_EmptyTitle(t *testing.T) {
+	store := &MockStore{}
+	resolver := testResolver(store, &MockOLClient{})
+
+	emptyTitle := ""
+	input := UpdateBookInput{
+		Title: &emptyTitle,
+	}
+
+	result, err := resolver.Mutation().UpdateBook(context.Background(), 1, input)
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsValidationError(err))
+	assert.Contains(t, err.Error(), "title")
+}
+
 func TestMutation_DeleteBook(t *testing.T) {
 	store := &MockStore{}
 	resolver := testResolver(store, &MockOLClient{})
